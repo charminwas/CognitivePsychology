@@ -1,0 +1,33 @@
+/* 页面基础样式 */
+body {
+  font-family: Arial, sans-serif;
+  margin: 20px;
+}
+
+/* 图表容器 */
+#chart-container {
+  width: 600px;
+  height: 400px;
+}
+
+/* 条形样式 */
+.bar {
+  fill: #3498db; /* 蓝色 */
+  transition: fill 0.3s; /*  hover过渡效果 */
+}
+
+/* 鼠标悬浮时的条形样式 */
+.bar:hover {
+  fill: #2980b9; /* 深一点的蓝色 */
+}
+
+/* 坐标轴文字样式 */
+.axis text {
+  font-size: 12px;
+}
+
+/* 坐标轴标题样式 */
+.axis path,
+.axis line {
+  stroke: #999;
+}
