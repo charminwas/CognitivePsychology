@@ -1,7 +1,7 @@
 from tkinter import *
 import random
 
-#字符、RGB、长度，窗口/部件尺寸
+#字符、RGB、数量，窗口尺寸，字体
 CHARACTERS = ['红', '橙', '黄', '绿', '青',
               '蓝', '紫', '粉', '黑', '棕']
 COLORS = [
@@ -19,7 +19,7 @@ COLORS = [
 COUNT = len(CHARACTERS)
 WIN_WIDTH = 500
 WIN_HEIGHT = 600
-FONT_FAMILY = 'Microsoft YaHei'
+FONT = 'Microsoft YaHei'
 
 #生成函数
 def generate_different():
@@ -42,7 +42,7 @@ class Application(Frame):
         self.display_area = Label(
             self, 
             text='这里将会展示带颜色的汉字',
-            font=(FONT_FAMILY, 30),
+            font=(FONT, 30),
             bg='white',
             relief=SUNKEN,
             bd=2,
@@ -53,7 +53,7 @@ class Application(Frame):
         self.bt_diff = Button(
             self,
             text='不同',
-            font=(FONT_FAMILY, 28),
+            font=(FONT, 28),
             command=self.show_different
         )
         self.bt_diff.place(x=0, y=500, width=250, height=100)
@@ -61,18 +61,19 @@ class Application(Frame):
         self.bt_same = Button(
             self,
             text='相同',
-            font=(FONT_FAMILY, 28),
+            font=(FONT, 28),
             command=self.show_same
         )
         self.bt_same.place(x=250, y=500, width=250, height=100)
 
+    #显示颜色文字
     def show_different(self):
         char, color = generate_different()
-        self.display_area.config(text=char, fg=color, font=(FONT_FAMILY, 100))
+        self.display_area.config(text=char, fg=color, font=(FONT, 120))
 
     def show_same(self):
         char, color = generate_same()
-        self.display_area.config(text=char, fg=color, font=(FONT_FAMILY, 100))
+        self.display_area.config(text=char, fg=color, font=(FONT, 120))
 
 
 if __name__ == '__main__':
