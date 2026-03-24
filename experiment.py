@@ -16,18 +16,18 @@ COLORS = [
     "#000000",   # 黑色
     "#8b4513"    # 棕色
 ]
-LEN = len(CHARACTERS)
+COUNT = len(CHARACTERS)
 WIN_WIDTH = 500
 WIN_HEIGHT = 600
-FONT_FAMILY = ('SimHei', 'Microsoft YaHei', 'sans-serif')
+FONT_FAMILY = 'Microsoft YaHei'
 
 #生成函数
 def generate_different():
-    char_idx, color_idx = random.sample(range(0, LEN), 2)
+    char_idx, color_idx = random.sample(range(0, COUNT), 2)
     return [CHARACTERS[char_idx], COLORS[color_idx]]
 
 def generate_same():
-    idx = random.randint(0, LEN-1)
+    idx = random.randint(0, COUNT-1)
     return CHARACTERS[idx], COLORS[idx]
 
 #窗口构造器
@@ -77,7 +77,7 @@ class Application(Frame):
 
 if __name__ == '__main__':
     root = Tk()
-    root.title('TEST')
+    root.title('Stroop Effect')
     root.geometry(f'{WIN_WIDTH}x{WIN_HEIGHT}')
     root.resizable(False, False)
     app = Application(root)
