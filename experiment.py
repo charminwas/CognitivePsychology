@@ -21,17 +21,8 @@ WIN_WIDTH = 500
 WIN_HEIGHT = 600
 FONT = 'Microsoft YaHei'
 
-#生成函数
-def generate_different():
-    char_idx, color_idx = random.sample(range(0, COUNT), 2)
-    return [CHARACTERS[char_idx], COLORS[color_idx]]
-
-def generate_same():
-    idx = random.randint(0, COUNT-1)
-    return CHARACTERS[idx], COLORS[idx]
-
 #窗口构造器
-class Application(Frame):
+class Experiment(Frame):
     def __init__(self, master):
         super().__init__(master)
         self.pack(fill=BOTH, expand=True)
@@ -68,12 +59,17 @@ class Application(Frame):
 
     #显示颜色文字
     def show_different(self):
-        char, color = generate_different()
-        self.display_area.config(text=char, fg=color, font=(FONT, 120))
+        char_idx, color_idx = random.sample(range(0, COUNT), 2)
+        self.display_area.config(
+            text=CHARACTERS[char_idx], fg=COLORS[color_idx], font=(FONT, 120)
+            )
 
     def show_same(self):
-        char, color = generate_same()
-        self.display_area.config(text=char, fg=color, font=(FONT, 120))
+        idx = random.randint(0, COUNT-1)
+        self.display_area.config(
+            text=CHARACTERS[idx], fg=COLORS[idx], font=(FONT, 120)
+            )
+
 
 
 if __name__ == '__main__':
@@ -81,5 +77,5 @@ if __name__ == '__main__':
     root.title('Stroop Effect')
     root.geometry(f'{WIN_WIDTH}x{WIN_HEIGHT}')
     root.resizable(False, False)
-    app = Application(root)
+    app = Experiment(root)
     root.mainloop()
