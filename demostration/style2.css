@@ -1,4 +1,0 @@
-/* 坐标轴线条 */
-.axis line, .axis path { stroke: #333; }
-/* 折线样式 */
-.line { fill: none; stroke: blue; stroke-width: 2; }
