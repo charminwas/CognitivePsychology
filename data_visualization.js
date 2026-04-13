@@ -155,6 +155,36 @@ d3.csv("data.csv").then(data => {
             .text(name);
     }
 
+    function DrawEachDecay(container, name, data, x, y){
+        const g = container.append('g')
+            .attr('transform', `translate(${x}, ${y})`);
+
+        //x轴y轴 论文里图有两条y轴，左边是正确数目右边是正确率
+        const xScale = d3.scaleLinear()
+            .domain([-0.15, 1.05])
+            .range([0, plotWidth])
+        const yScaleLeft = d3.scaleLinear()
+            .domain([0, 9])
+            .range([plotHeight, 0])
+        const yScaleRight = d3.scaleLinear()
+            .domain([0, 100])
+            .range([plotHeight, 0])
+
+        const xTickValues = [-0.1, 0, 0.15, 0.3, 0.5, 1.0];
+        const yTickValuesLeft = [2, 4, 6, 8, 9];
+        const yTickValuesRight = [0, 25, 50, 75, 100];
+        g.append('g')
+            .attr('transform', `translate(0, ${plotHeight})`)
+            .call(d3.axisBottom(xScale).tickValues(xTickValues))
+            .style('font-size', '12px');
+        g.append('g')
+            .call(d3.axisLeft(yScaleLeft).tickValues(yTickValuesLeft))
+            .style('font-size', '12px');
+        g.append('g')
+            .call(d3.axisRight(yScaleRight).tickValues(yTickValuesRight))
+            .style('font-size', '12px');
+    }
+
     //绘图部分
     const mergedData = [...data_im, ...data_pa];
     const grouped_data = d3.group(mergedData, d => d.name);
