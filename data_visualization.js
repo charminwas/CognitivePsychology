@@ -64,7 +64,7 @@ function getAverageDe(data){
 }
 
 //解析csv，字符串转数字
-d3.csv("data.csv").then(data => {
+d3.csv("Sperling_C_1776169148369.csv").then(data => {
     // 字符串转数字
     data.forEach(d => {
         d.input = +d.input;
@@ -96,7 +96,8 @@ d3.csv("data.csv").then(data => {
     const svg2 = d3.select("#decay")
         .append('svg')
         .attr('width', totalWidth)
-        .attr('height', totalHeight);
+        .attr('height', decayTotalHeight)
+        .style("border", "1px solid #000"); // 新增
 
     //画单个图表的函数
     function drawEachImPa(container, name, data, x, y){
@@ -223,9 +224,13 @@ d3.csv("data.csv").then(data => {
     }
 
     function DrawEachDecay(container, name, de_data, im_data, x, y){
+        if (!de_data || de_data.length === 0) {
+        console.warn(`衰变图【${name}】无数据`);
+        return;
+        }
         //只要3x3矩阵的
-        im_data = im_data.filter(item => item.input === 9);
-        de_data = de_data.sort((a, b) => a.delay - b.delay);
+        im_data = im_data?.filter(item => item.input == 9) || [];
+        de_data = [...de_data].sort((a,b)=>a.delay - b.delay);
         const g = container.append('g')
             .attr('transform', `translate(${x}, ${y})`);
 
@@ -241,16 +246,10 @@ d3.csv("data.csv").then(data => {
             .range([plotHeight, 0])
 
         //按照论文，添加了x=0的标准线
-        const startLine = d3.line()
-            .x(d => xScale(0))
-            .y(d => yScaleLeft(d));
-        const standardPoints = [0, 9];
-        g.append('path')//实例化
-            .attr('d', startLine(standardPoints))
-            .attr('fill', 'none')
-            .attr('stroke', '#ff7f0e')
-            .attr('stroke-width', 2)
-            .attr('stroke-dasharray', '4 2');
+        g.append('line')
+            .attr('x1', xScale(0)).attr('x2', xScale(0))
+            .attr('y1', yScaleLeft(0)).attr('y2', yScaleLeft(9))
+            .attr('stroke','#ff7f0e').attr('stroke-width',2).attr('stroke-dasharray','4 2');
 
         //实验数据的线
         const line = d3.line()
@@ -310,7 +309,7 @@ d3.csv("data.csv").then(data => {
             .attr('y', yScaleLeft(1))
             .attr('height', plotHeight - yScaleLeft(1))
             .attr('fill', '#000')
-        const imValue = im_data[0]?.output || 0;
+        const imValue = im_data.length > 0 ? im_data[0].output : 0;
         const imValuePercentage = (imValue / 9) * 100
         g.append('rect')
             .attr('x', xScale(1.18))
@@ -352,16 +351,16 @@ d3.csv("data.csv").then(data => {
 
     drawEachImPa(svg1, 'Average', grouped_data.get('average'), margin.left, margin.top);
     drawEachImPa(svg1, 'C', grouped_data.get('C'), margin.left + plotWidth + gap, margin.top);
-    drawEachImPa(svg1, 'L', grouped_data.get('L'), margin.left, margin.top + plotHeight + gap);
-    drawEachImPa(svg1, 'W', grouped_data.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
+    //drawEachImPa(svg1, 'L', grouped_data.get('L'), margin.left, margin.top + plotHeight + gap);
+    //drawEachImPa(svg1, 'W', grouped_data.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
 
     //绘图部分 - 实验4（衰变图）✅ 修复4：正确传递对应被试的im数据 + 修正Y坐标
     const grouped_de = d3.group(data_de, d => d.name);
     const grouped_im = d3.group(data_im, d => d.name); // 按被试分组实验1数据
 
     // ✅ 修复5：衰变图从顶部开始画（不超出SVG），标准2x2布局
-    DrawEachDecay(svg2, 'Average', grouped_de.get('average'), grouped_im.get('average'), margin.left, margin.top);
+    //DrawEachDecay(svg2, 'Average', grouped_de.get('average'), grouped_im.get('average'), margin.left, margin.top);
     DrawEachDecay(svg2, 'C', grouped_de.get('C'), grouped_im.get('C'), margin.left + plotWidth + gap, margin.top);
-    DrawEachDecay(svg2, 'L', grouped_de.get('L'), grouped_im.get('L'), margin.left, margin.top + plotHeight + gap);
-    DrawEachDecay(svg2, 'W', grouped_de.get('W'), grouped_im.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
+    //DrawEachDecay(svg2, 'L', grouped_de.get('L'), grouped_im.get('L'), margin.left, margin.top + plotHeight + gap);
+    //DrawEachDecay(svg2, 'W', grouped_de.get('W'), grouped_im.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
 });
