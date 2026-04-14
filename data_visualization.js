@@ -1,7 +1,7 @@
 //常量区
-const margin = { top: 20, right: 20, bottom: 30, left: 40 };
-const plotWidth = 250;
-const plotHeight = 250;
+const margin = { top: 20, right: 40, bottom: 30, left: 40 };
+const plotWidth = 300;
+const plotHeight = 300;
 const gap = 50;
 const totalWidth = plotWidth * 2 + gap + margin.left + margin.right;
 const totalHeight = plotHeight * 2 + gap + margin.top + margin.bottom;
@@ -80,7 +80,7 @@ d3.csv("data.csv").then(data => {
         return item.delay == 0
     });
     const raw_data_de = d3.filter(data, (item) => {
-        return item.delay != 65537
+        return item.delay != 65537 && item.input == 9
     });
     //得到每个被试的平均值和所有人的平均值数据集
     const data_im = getAverageImPa(raw_data_im);
@@ -283,8 +283,8 @@ d3.csv("data.csv").then(data => {
     const grouped_im = d3.group(data_im, d => d.name); // 按被试分组实验1数据
 
     // ✅ 修复5：衰变图从顶部开始画（不超出SVG），标准2x2布局
-    DrawEachDecay(svg2, 'Avg-Decay', grouped_de.get('average'), grouped_im.get('average'), margin.left, margin.top);
-    DrawEachDecay(svg2, 'C-Decay', grouped_de.get('C'), grouped_im.get('C'), margin.left + plotWidth + gap, margin.top);
-    DrawEachDecay(svg2, 'L-Decay', grouped_de.get('L'), grouped_im.get('L'), margin.left, margin.top + plotHeight + gap);
-    DrawEachDecay(svg2, 'W-Decay', grouped_de.get('W'), grouped_im.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
+    DrawEachDecay(svg2, 'Average', grouped_de.get('average'), grouped_im.get('average'), margin.left, margin.top);
+    DrawEachDecay(svg2, 'C', grouped_de.get('C'), grouped_im.get('C'), margin.left + plotWidth + gap, margin.top);
+    DrawEachDecay(svg2, 'L', grouped_de.get('L'), grouped_im.get('L'), margin.left, margin.top + plotHeight + gap);
+    DrawEachDecay(svg2, 'W', grouped_de.get('W'), grouped_im.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
 });
