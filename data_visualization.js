@@ -311,6 +311,7 @@ d3.csv("data.csv").then(data => {
             .attr('height', plotHeight - yScaleLeft(1))
             .attr('fill', '#000')
         const imValue = im_data[0]?.output || 0;
+        const imValuePercentage = (imValue / 9) * 100
         g.append('rect')
             .attr('x', xScale(1.18))
             .attr('width', xScale(1.23) - xScale(1.18))
@@ -320,22 +321,21 @@ d3.csv("data.csv").then(data => {
             .on('mouseover', function(e){
                 d3.select(this).style('opacity', 0.7);
                 const rectX = xScale(1.18);
-                const rectWidth = xScale(1.23) - xScale(1.18);
-                const centerX = rectX + rectWidth / 2;
-                const bottomY = yScaleLeft(imValue) + (plotHeight - yScaleLeft(imValue));
-                g.appen('text')
+                const rectW = xScale(1.23) - xScale(1.18);
+                const centerX = rectX + rectW / 2;
+                g.append('text')
                     .attr('class', 'tip')
                     .attr('text-anchor', 'middle')
                     .attr('x', centerX)
-                    .attr('y', bottomY + 15)
+                    .attr('y', yScaleLeft(imValue) - 15)
                     .attr('font-size', '12px')
-                    .attr('fill', '#333')
-                    .text(`Immediate-Memory正确率: ${imValue.toFixed(2)}%`)
+                    .attr('fill', '#000')
+                    .text(`Immediate-Memory正确率: ${imValuePercentage.toFixed(2)}%`)
             })
             .on('mouseout', function(){
                 d3.select(this).style('opacity', 1);
                 d3.selectAll('.tip').remove();
-            })
+            });
         //图例区（Ss的名字）
         g.append('text')
             .attr('x', plotWidth - 150)
