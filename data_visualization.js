@@ -1,5 +1,5 @@
 //常量区
-const margin = { top: 20, right: 40, bottom: 30, left: 40 };
+const margin = { top: 20, right: 100, bottom: 30, left: 40 };
 const plotWidth = 300;
 const plotHeight = 300;
 const gap = 50;
@@ -149,7 +149,23 @@ d3.csv("data.csv").then(data => {
             .attr('cx', d => xScale(d.input))
             .attr('cy', d => yScale(d.output))
             .attr('r', 3)
-            .attr('fill', 'steelblue');
+            .attr('fill', 'steelblue')
+            .attr('title', d => `input:${d.input} output:${d.output}`)
+            //鼠标悬浮显示具体数值
+            .on('mouseover', function(e, d) {
+                d3.select(this).attr('r', 6);
+                // 文字显示在点正下方
+                g.append('text')
+                    .attr('class', 'tip')
+                    .attr('text-anchor', 'middle')  // 水平居中
+                    .attr('x', xScale(d.input))
+                    .attr('y', yScale(d.output) + 15) // 向下偏移
+                    .text(`input: ${d.input}, output: ${d.output.toFixed(2)}`);
+            })
+            .on('mouseout', function() {
+                d3.select(this).attr('r', 3);
+                d3.selectAll('.tip').remove();
+            });
 
         //部分报告法实验数据的线
         const pa_line = d3.line()
@@ -169,7 +185,22 @@ d3.csv("data.csv").then(data => {
             .attr('cx', d => xScale(d.input))
             .attr('cy', d => yScale(d.output))
             .attr('r', 3)
-            .attr('fill', 'red');
+            .attr('fill', 'red')
+            //鼠标悬浮显示具体数值
+            .on('mouseover', function(e, d) {
+                d3.select(this).attr('r', 6);
+                // 文字显示在点正下方
+                g.append('text')
+                    .attr('class', 'tip')
+                    .attr('text-anchor', 'middle')  // 水平居中
+                    .attr('x', xScale(d.input))
+                    .attr('y', yScale(d.output) + 15) // 向下偏移
+                    .text(`input: ${d.input}, output: ${d.output.toFixed(2)}`);
+            })
+            .on('mouseout', function() {
+                d3.select(this).attr('r', 3);
+                d3.selectAll('.tip').remove();
+            });
         
         //我们实验只会出现这几个值
         const xTickValues = [6, 8, 9, 12];
@@ -209,6 +240,18 @@ d3.csv("data.csv").then(data => {
             .domain([0, 100])
             .range([plotHeight, 0])
 
+        //按照论文，添加了x=0的标准线
+        const startLine = d3.line()
+            .x(d => xScale(0))
+            .y(d => yScaleLeft(d));
+        const standardPoints = [0, 9];
+        g.append('path')//实例化
+            .attr('d', startLine(standardPoints))
+            .attr('fill', 'none')
+            .attr('stroke', '#ff7f0e')
+            .attr('stroke-width', 2)
+            .attr('stroke-dasharray', '4 2');
+
         //实验数据的线
         const line = d3.line()
             .x(d => xScale(d.delay))
@@ -227,7 +270,22 @@ d3.csv("data.csv").then(data => {
             .attr('cx', d => xScale(d.delay))
             .attr('cy', d => yScaleLeft(d.output))
             .attr('r', 3)
-            .attr('fill', 'red');
+            .attr('fill', 'red')
+            //鼠标悬浮显示具体数值
+            .on('mouseover', function(e, d) {
+                d3.select(this).attr('r', 6);
+                // 文字显示在点正下方
+                g.append('text')
+                    .attr('class', 'tip')
+                    .attr('text-anchor', 'middle')  // 水平居中
+                    .attr('x', xScale(d.delay))
+                    .attr('y', yScaleLeft(d.output) + 15) // 向下偏移
+                    .text(`delay: ${d.delay}, output: ${d.output.toFixed(2)}`);
+            })
+            .on('mouseout', function() {
+                d3.select(this).attr('r', 3);
+                d3.selectAll('.tip').remove();
+            });
         
         //补充各个轴的特征并实例化
         const xTickValues = [-0.1, 0, 0.15, 0.3, 0.5, 1.0];
@@ -259,6 +317,25 @@ d3.csv("data.csv").then(data => {
             .attr('y', yScaleLeft(imValue))
             .attr('height', plotHeight - yScaleLeft(imValue))
             .attr('fill', '#000')
+            .on('mouseover', function(e){
+                d3.select(this).style('opacity', 0.7);
+                const rectX = xScale(1.18);
+                const rectWidth = xScale(1.23) - xScale(1.18);
+                const centerX = rectX + rectWidth / 2;
+                const bottomY = yScaleLeft(imValue) + (plotHeight - yScaleLeft(imValue));
+                g.appen('text')
+                    .attr('class', 'tip')
+                    .attr('text-anchor', 'middle')
+                    .attr('x', centerX)
+                    .attr('y', bottomY + 15)
+                    .attr('font-size', '12px')
+                    .attr('fill', '#333')
+                    .text(`Immediate-Memory正确率: ${imValue.toFixed(2)}%`)
+            })
+            .on('mouseout', function(){
+                d3.select(this).style('opacity', 1);
+                d3.selectAll('.tip').remove();
+            })
         //图例区（Ss的名字）
         g.append('text')
             .attr('x', plotWidth - 150)
@@ -269,7 +346,7 @@ d3.csv("data.csv").then(data => {
             .text(name);
     }
 
-    //绘图部分
+    //实验1，3的绘图部分
     const mergedData = [...data_im, ...data_pa];
     const grouped_data = d3.group(mergedData, d => d.name);
 
