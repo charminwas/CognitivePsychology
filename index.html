@@ -137,6 +137,40 @@
             color: white;
             line-height: 1;
         }
+
+        .recall-grid {
+            display: inline-grid;
+            gap: 12px 18px;
+            justify-items: center;
+            align-items: center;
+            padding: 18px 10px 8px;
+            margin-top: 8px;
+        }
+        .recall-cell {
+            width: 70px;
+            height: 74px;
+            font-size: 44px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0;
+            text-align: center;
+            color: #fff;
+            background-color: #2d2d2d;
+            border: 2px solid #5a5a5a;
+            border-radius: 10px;
+            outline: none;
+            line-height: 74px;
+            padding: 0;
+        }
+        .recall-cell:focus {
+            border-color: #ffaa66;
+            box-shadow: 0 0 0 3px rgba(255,170,102,0.15);
+        }
+        .hint-row {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #999;
+        }
     </style>
 </head>
 <body>
@@ -165,6 +199,7 @@
     let subjectName = "";
     let currentTrialIndex = 0;
     let isRunning = false;
+    let abortRequested = false;
     
     const container = document.getElementById('container');
     
@@ -322,6 +357,42 @@
         return shuffleArray(trialList);
     }
     
+    function exportDataToCsv(options = {}) {
+        const { tag = "COMPLETE", includeEmpty = false } = options;
+        if (!includeEmpty && experimentData.length === 0) { alert("无数据"); return false; }
+        const headers = ['name', 'input', 'output', 'delay'];
+        const rows = [headers.join(',')];
+        for (const row of experimentData) {
+            rows.push(`${row.name},${row.input},${row.output},${row.delay}`);
+        }
+        const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        const safeTag = String(tag).replace(/[^A-Za-z0-9_-]/g, "_");
+        a.download = `Sperling_${subjectName || "unknown"}_${safeTag}_${Date.now()}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+        return true;
+    }
+    
+    function abortExperiment(tag = "ABORTED") {
+        abortRequested = true;
+        isRunning = false;
+        exportDataToCsv({ tag, includeEmpty: true });
+        container.innerHTML = `
+            <div class="screen">
+                <div class="title">实验已退出</div>
+                <p class="info-text">已导出当前实验结果（共 ${experimentData.length} 个试次）</p>
+                <button id="restart-btn">新被试</button>
+            </div>
+        `;
+        document.getElementById('restart-btn')?.addEventListener('click', () => {
+            abortRequested = false;
+            isRunning = false;
+            showSubjectForm();
+        });
+    }
+    
     function showFixationAndWait() {
         return new Promise((resolve) => {
             const displayDiv = document.getElementById('display-content');
@@ -335,6 +406,11 @@
                 if (e.code === 'Space') {
                     e.preventDefault();
                     window.removeEventListener('keydown', keyHandler);
+                    resolve();
+                } else if (e.code === 'Escape') {
+                    e.preventDefault();
+                    window.removeEventListener('keydown', keyHandler);
+                    abortExperiment("ABORTED");
                     resolve();
                 }
             };
@@ -355,7 +431,9 @@
             updateProgress();
             
             await showFixationAndWait();
+            if (abortRequested) { resolve(); return; }
             const displayDiv = document.getElementById('display-content');
+            if (!displayDiv) { resolve(); return; }
             
             // 根据条件决定音频播放时机
             if (trial.type === 'partial') {
@@ -389,70 +467,117 @@
     function showInputScreen(trial, resolve) {
         const isWhole = (trial.type === 'whole');
         const expectedCount = isWhole ? trial.totalLetters : trial.rowLength;
-        const promptText = `请输入 ${expectedCount} 个字母（按回车提交）`;
+        const promptText = isWhole
+            ? `请按刚才呈现的矩阵格式输入 ${expectedCount} 个字母`
+            : `请输入 ${expectedCount} 个字母`;
+        const detailText = isWhole
+            ? `填满后按回车键提交`
+            : `请只输入被提示那一行的 ${expectedCount} 个字母，填满后按回车键提交`;
         
+        const rows = isWhole ? trial.rows : 1;
+        const cols = isWhole ? trial.cols : expectedCount;
+        const gridTemplate = `grid-template-columns: repeat(${cols}, 70px);`;
+        const rowLabel = (!isWhole && trial.targetRow) ? `（第 ${trial.targetRow} 行）` : '';
+        let cellsHtml = '';
+        for (let i = 0; i < rows * cols; i++) {
+            cellsHtml += `<input class="recall-cell" inputmode="latin" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="1" data-idx="${i}">`;
+        }
+
         container.innerHTML = `
             <div class="screen">
-                <div class="input-prompt">${promptText}</div>
-                <input type="text" id="user-input" class="experiment-input" placeholder="" autocomplete="off">
+                <div class="input-prompt">${promptText}${rowLabel}</div>
+                <div class="recall-grid" id="recall-grid" style="${gridTemplate}">${cellsHtml}</div>
+                <div class="hint-row" id="recall-hint">${detailText}</div>
                 <div class="info-text">${currentTrialIndex + 1} / ${trials.length}</div>
             </div>
             <div id="progress-bar" class="progress-bar"></div>
         `;
         updateProgress();
-        
-        const inputEl = document.getElementById('user-input');
-        const finishHandler = (e) => {
-            if (e.key === 'Enter') {
-                e.preventDefault();
-                const rawInput = inputEl.value.trim();
-                const userLetters = parseUserInput(rawInput, expectedCount);
-                
-                let absoluteScore = 0, maxPossible = 0, availableLetters = 0;
-                if (isWhole) {
-                    const flatTarget = trial.matrix.flat();
-                    absoluteScore = computeScore(flatTarget, userLetters);
-                    maxPossible = trial.totalLetters;
-                    availableLetters = absoluteScore;
-                } else {
-                    const targetRowArr = trial.matrix[trial.targetRow - 1];
-                    absoluteScore = computeScore(targetRowArr, userLetters);
-                    maxPossible = trial.rowLength;
-                    availableLetters = (absoluteScore / trial.rowLength) * trial.totalLetters;
-                }
-                
-                // delay 值规则：
-                // 全部报告法: 65537
-                // 部分报告法: -0.1 (提前100ms)
-                // 延迟报告法: 秒为单位 (0, 0.15, 0.3, 0.5, 1.0)
-                let delayValue;
-                if (trial.type === 'whole') {
-                    delayValue = 65537;
-                } else if (trial.type === 'partial') {
-                    delayValue = -0.1;
-                } else {
-                    delayValue = trial.delayMs / 1000;
-                }
-                
-                experimentData.push({
-                    name: subjectName,
-                    input: trial.totalLetters,
-                    output: availableLetters,
-                    delay: delayValue
-                });
-                
-                inputEl.removeEventListener('keypress', finishHandler);
-                resolve();
-            }
+
+        const inputs = Array.from(document.querySelectorAll('.recall-cell'));
+        const normalizeChar = (val) => {
+            const c = String(val || '').toUpperCase().replace(/[^A-Z]/g, '');
+            return c.slice(0, 1);
         };
-        inputEl.addEventListener('keypress', finishHandler);
-        inputEl.focus();
+
+        const isComplete = () => inputs.every(el => !!normalizeChar(el.value));
+
+        const trySubmit = () => {
+            if (!isComplete()) return;
+            const userLetters = inputs.map(el => normalizeChar(el.value));
+
+            let absoluteScore = 0, availableLetters = 0;
+            if (isWhole) {
+                const flatTarget = trial.matrix.flat();
+                absoluteScore = computeScore(flatTarget, userLetters);
+                availableLetters = absoluteScore;
+            } else {
+                const targetRowArr = trial.matrix[trial.targetRow - 1];
+                absoluteScore = computeScore(targetRowArr, userLetters);
+                availableLetters = (absoluteScore / trial.rowLength) * trial.totalLetters;
+            }
+
+            let delayValue;
+            if (trial.type === 'whole') {
+                delayValue = 65537;
+            } else if (trial.type === 'partial') {
+                delayValue = -0.1;
+            } else {
+                delayValue = trial.delayMs / 1000;
+            }
+
+            experimentData.push({
+                name: subjectName,
+                input: trial.totalLetters,
+                output: availableLetters,
+                delay: delayValue
+            });
+
+            inputs.forEach(el => el.disabled = true);
+            resolve();
+        };
+
+        const moveFocus = (idx, dir) => {
+            const next = idx + dir;
+            if (next >= 0 && next < inputs.length) inputs[next].focus();
+        };
+
+        inputs.forEach((el, idx) => {
+            el.addEventListener('input', (e) => {
+                const v = normalizeChar(e.target.value);
+                e.target.value = v;
+                if (v) moveFocus(idx, 1);
+                const hintEl = document.getElementById('recall-hint');
+                if (hintEl) {
+                    hintEl.textContent = isComplete() ? '已填满：按回车键提交' : detailText;
+                }
+            });
+            el.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    trySubmit();
+                    return;
+                }
+                if (e.key === 'Backspace') {
+                    if (!normalizeChar(el.value)) {
+                        e.preventDefault();
+                        moveFocus(idx, -1);
+                    }
+                }
+                if (e.key === 'ArrowLeft') { e.preventDefault(); moveFocus(idx, -1); }
+                if (e.key === 'ArrowRight') { e.preventDefault(); moveFocus(idx, 1); }
+            });
+        });
+
+        inputs[0]?.focus();
     }
     
     async function runAllTrials() {
         for (let i = 0; i < trials.length; i++) {
+            if (abortRequested) return;
             currentTrialIndex = i;
             await runSingleTrial(trials[i]);
+            if (abortRequested) return;
         }
         showCompletionScreen();
     }
@@ -466,31 +591,18 @@
                 <button id="restart-btn" style="margin-left:15px;">新被试</button>
             </div>
         `;
-        document.getElementById('export-csv')?.addEventListener('click', exportData);
+        document.getElementById('export-csv')?.addEventListener('click', () => exportDataToCsv({ tag: "COMPLETE" }));
         document.getElementById('restart-btn')?.addEventListener('click', () => {
+            abortRequested = false;
             isRunning = false;
             showSubjectForm();
         });
     }
     
-    function exportData() {
-        if (experimentData.length === 0) { alert("无数据"); return; }
-        const headers = ['name', 'input', 'output', 'delay'];
-        const rows = [headers.join(',')];
-        for (const row of experimentData) {
-            rows.push(`${row.name},${row.input},${row.output},${row.delay}`);
-        }
-        const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(blob);
-        a.download = `Sperling_${subjectName}_${Date.now()}.csv`;
-        a.click();
-        URL.revokeObjectURL(a.href);
-    }
-    
     async function startExperiment() {
         if (isRunning) return;
         isRunning = true;
+        abortRequested = false;
         audioContext = new (window.AudioContext || window.webkitAudioContext)();
         await audioContext.resume();
         trials = generateTrials();
