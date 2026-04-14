@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sperling (1960) 感觉记忆实验 - 完整矩阵版</title>
+    <style>
+        /* ===== 完全保留原有视觉风格 ===== */
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #0a0a0a;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-family: 'Segoe UI', 'SF Pro', 'Inter', 'Arial', sans-serif;
+            background-color: #0a0a0a;
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #0a0a0a;
+        }
+        .screen {
+            text-align: center;
+            background: #1a1a1a;
+            padding: 40px;
+            border-radius: 24px;
+            max-width: 900px;
+            width: 90%;
+            box-shadow: 0 0 30px rgba(0,0,0,0.3);
+        }
+        .title {
+            font-size: 28px;
+            font-weight: bold;
+            color: #ffaa66;
+            margin-bottom: 20px;
+            font-family: 'Segoe UI', 'SF Pro', 'Inter', 'Arial', sans-serif;
+        }
+        .info-text {
+            color: #ccc;
+            font-size: 18px;
+            margin: 15px 0;
+            font-family: 'Segoe UI', 'SF Pro', 'Inter', 'Arial', sans-serif;
+        }
+        input {
+            background-color: #2d2d2d;
+            border: 2px solid #5a5a5a;
+            color: #0f0;
+            font-family: 'Segoe UI', 'SF Pro', 'Inter', 'Arial', sans-serif;
+            font-size: 28px;
+            padding: 15px 20px;
+            width: 70%;
+            text-align: center;
+            border-radius: 8px;
+            outline: none;
+            letter-spacing: 4px;
+        }
+        input:focus {
+            border-color: #ffaa66;
+        }
+        button {
+            background-color: #3a6ea5;
+            color: white;
+            font-size: 20px;
+            font-family: 'Segoe UI', 'SF Pro', 'Inter', 'Arial', sans-serif;
+            border: none;
+            border-radius: 8px;
+            padding: 12px 28px;
+            cursor: pointer;
+            margin-top: 15px;
+            transition: 0.2s;
+        }
+        button:hover {
+            background-color: #2c4e7a;
+        }
+        .matrix-grid {
+            display: inline-grid;
+            gap: 15px 25px;
+            justify-items: center;
+            align-items: center;
+            background: transparent;
+            padding: 20px;
+        }
+        .matrix-grid div {
+            font-family: 'Segoe UI', 'SF Pro', 'Inter', 'Arial', sans-serif;
+            font-size: 56px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 0 0 2px #888;
+        }
+        .grid-2col { grid-template-columns: repeat(2, 85px); }
+        .grid-3col { grid-template-columns: repeat(3, 85px); }
+        .grid-4col { grid-template-columns: repeat(4, 85px); }
+        
+        .input-prompt {
+            color: #ddd;
+            font-size: 20px;
+            margin: 20px 0 15px;
+            font-family: 'Segoe UI', 'SF Pro', 'Inter', 'Arial', sans-serif;
+        }
+        .progress-bar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            height: 3px;
+            background-color: #ffaa66;
+            width: 0%;
+            transition: width 0.2s;
+            z-index: 10000;
+        }
+        .stimulus-wrapper {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 60vh;
+        }
+        .fixation-container {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: center;
+        }
+        .fixation-cross {
+            font-size: 72px;
+            color: white;
+            line-height: 1;
+        }
+        .space-hint {
+            font-size: 18px;
+            color: #888;
+            margin-top: 20px;
+            letter-spacing: normal;
+        }
+    </style>
+</head>
+<body>
+<div id="container"></div>
+
+<script>
+    // ==================== 实验配置 ====================
+    const CONSONANTS = ['B','C','D','F','G','H','J','K','L','M','N','P','Q','R','S','T','V','W','X','Z'];
+    
+    const AUDIO_FREQS = { low: 250, mid: 1000, high: 2500 };
+    const AUDIO_GAIN = { low: 0.42, mid: 0.30, high: 0.12 };
+    const DELAYS = [0, 100, 300, 500, 1000];
+    
+    const MATRIX_TYPES = {
+        '2x3': { rows: 2, cols: 3, total: 6, rowLen: 3 },
+        '2x4': { rows: 2, cols: 4, total: 8, rowLen: 4 },
+        '3x3': { rows: 3, cols: 3, total: 9, rowLen: 3 },
+        '3x4': { rows: 3, cols: 4, total: 12, rowLen: 4 }
+    };
+    const MATRIX_KEYS = ['2x3', '2x4', '3x3', '3x4'];
+    
+    let audioContext = null;
+    let trials = [];
+    let experimentData = [];
+    let subjectName = "";
+    let currentTrialIndex = 0;
+    let isRunning = false;
+    
+    const container = document.getElementById('container');
+    
+    function shuffleArray(arr) {
+        for (let i = arr.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        return arr;
+    }
+    
+    function generateMatrix(rows, cols) {
+        let shuffled = [...CONSONANTS];
+        shuffleArray(shuffled);
+        let selected = shuffled.slice(0, rows * cols);
+        let matrix = [];
+        for (let r = 0; r < rows; r++) {
+            let row = [];
+            for (let c = 0; c < cols; c++) {
+                row.push(selected[r * cols + c]);
+            }
+            matrix.push(row);
+        }
+        return matrix;
+    }
+    
+    function renderMatrixHTML(matrix, rows, cols) {
+        let colClass = '';
+        if (cols === 2) colClass = 'grid-2col';
+        else if (cols === 3) colClass = 'grid-3col';
+        else if (cols === 4) colClass = 'grid-4col';
+        let html = `<div class="matrix-grid ${colClass}" style="grid-template-columns: repeat(${cols}, 85px);">`;
+        for (let r = 0; r < rows; r++) {
+            for (let c = 0; c < cols; c++) {
+                html += `<div>${matrix[r][c]}</div>`;
+            }
+        }
+        html += `</div>`;
+        return html;
+    }
+    
+    function playTone(freq, gainVal) {
+        if (!audioContext) return;
+        const doPlay = () => {
+            const now = audioContext.currentTime;
+            const osc = audioContext.createOscillator();
+            const gain = audioContext.createGain();
+            osc.connect(gain);
+            gain.connect(audioContext.destination);
+            osc.frequency.value = freq;
+            gain.gain.setValueAtTime(gainVal, now);
+            gain.gain.exponentialRampToValueAtTime(0.00001, now + 0.2);
+            osc.start();
+            osc.stop(now + 0.2);
+        };
+        if (audioContext.state === 'suspended') {
+            audioContext.resume().then(doPlay);
+        } else {
+            doPlay();
+        }
+    }
+    
+    function playCueByRow(rowNum, totalRows) {
+        if (totalRows === 2) {
+            if (rowNum === 1) playTone(AUDIO_FREQS.high, AUDIO_GAIN.high);
+            else if (rowNum === 2) playTone(AUDIO_FREQS.low, AUDIO_GAIN.low);
+        } else {
+            if (rowNum === 1) playTone(AUDIO_FREQS.high, AUDIO_GAIN.high);
+            else if (rowNum === 2) playTone(AUDIO_FREQS.mid, AUDIO_GAIN.mid);
+            else if (rowNum === 3) playTone(AUDIO_FREQS.low, AUDIO_GAIN.low);
+        }
+    }
+    
+    function computeScore(targetArr, userArr) {
+        let correct = 0;
+        for (let i = 0; i < Math.min(targetArr.length, userArr.length); i++) {
+            if (targetArr[i] === userArr[i]) correct++;
+        }
+        return correct;
+    }
+    
+    function parseUserInput(inputStr, expectedLen) {
+        let cleaned = inputStr.toUpperCase().replace(/[^A-Z]/g, '');
+        if (!inputStr.includes(' ') && cleaned.length === expectedLen) {
+            return cleaned.split('');
+        }
+        let parts = cleaned.split('');
+        return parts.slice(0, expectedLen);
+    }
+    
+    function updateProgress() {
+        let pct = (currentTrialIndex / trials.length) * 100;
+        let bar = document.getElementById('progress-bar');
+        if (bar) bar.style.width = pct + '%';
+    }
+    
+    function generateTrials() {
+        let trialList = [];
+        
+        // 全部报告法：四种矩阵各5次
+        for (let key of MATRIX_KEYS) {
+            const spec = MATRIX_TYPES[key];
+            for (let i = 0; i < 5; i++) {
+                trialList.push({
+                    type: 'whole', rows: spec.rows, cols: spec.cols,
+                    totalLetters: spec.total, rowLength: spec.rowLen,
+                    matrix: generateMatrix(spec.rows, spec.cols),
+                    targetRow: null, delayMs: null
+                });
+            }
+        }
+        
+        // 部分报告法：四种矩阵各5次，行平衡
+        for (let key of MATRIX_KEYS) {
+            const spec = MATRIX_TYPES[key];
+            const maxRow = spec.rows;
+            let targetRows = [];
+            for (let r = 1; r <= maxRow; r++) {
+                let count = Math.floor(5 / maxRow);
+                for (let c = 0; c < count; c++) targetRows.push(r);
+            }
+            while(targetRows.length < 5) {
+                for (let r = 1; r <= maxRow && targetRows.length < 5; r++) targetRows.push(r);
+            }
+            targetRows = shuffleArray(targetRows.slice(0,5));
+            for (let i = 0; i < 5; i++) {
+                trialList.push({
+                    type: 'partial', rows: spec.rows, cols: spec.cols,
+                    totalLetters: spec.total, rowLength: spec.rowLen,
+                    matrix: generateMatrix(spec.rows, spec.cols),
+                    targetRow: targetRows[i], delayMs: 0
+                });
+            }
+        }
+        
+        // 延迟报告法：3x3矩阵，20次
+        const spec33 = MATRIX_TYPES['3x3'];
+        for (let d of DELAYS) {
+            let rowsForDelay = [];
+            for (let rep = 0; rep < 4; rep++) {
+                rowsForDelay.push((rep % 3) + 1);
+            }
+            rowsForDelay = shuffleArray(rowsForDelay);
+            for (let i = 0; i < 4; i++) {
+                trialList.push({
+                    type: 'delayed', rows: spec33.rows, cols: spec33.cols,
+                    totalLetters: spec33.total, rowLength: spec33.rowLen,
+                    matrix: generateMatrix(spec33.rows, spec33.cols),
+                    targetRow: rowsForDelay[i], delayMs: d
+                });
+            }
+        }
+        
+        return shuffleArray(trialList);
+    }
+    
+    function showFixationAndWait() {
+        return new Promise((resolve) => {
+            const displayDiv = document.getElementById('display-content');
+            if (!displayDiv) { resolve(); return; }
+            displayDiv.innerHTML = `
+                <div class="fixation-container">
+                    <div class="fixation-cross">+</div>
+                    <div class="space-hint">按空格键继续</div>
+                </div>
+            `;
+            const keyHandler = (e) => {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    window.removeEventListener('keydown', keyHandler);
+                    resolve();
+                }
+            };
+            window.addEventListener('keydown', keyHandler);
+        });
+    }
+    
+    function runSingleTrial(trial) {
+        return new Promise(async (resolve) => {
+            container.innerHTML = `
+                <div class="stimulus-wrapper" style="width:100%;">
+                    <div id="stimulus-area" style="min-height:400px; display:flex; justify-content:center; align-items:center; flex-direction:column; width:100%;">
+                        <div id="display-content"></div>
+                    </div>
+                </div>
+                <div id="progress-bar" class="progress-bar"></div>
+            `;
+            updateProgress();
+            
+            await showFixationAndWait();
+            const displayDiv = document.getElementById('display-content');
+            
+            displayDiv.innerHTML = renderMatrixHTML(trial.matrix, trial.rows, trial.cols);
+            await new Promise(r => setTimeout(r, 50));
+            displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
+            
+            if (trial.type === 'whole') {
+                showInputScreen(trial, resolve);
+            } else if (trial.type === 'partial') {
+                playCueByRow(trial.targetRow, trial.rows);
+                setTimeout(() => showInputScreen(trial, resolve), 200);
+            } else if (trial.type === 'delayed') {
+                setTimeout(() => {
+                    playCueByRow(trial.targetRow, trial.rows);
+                    setTimeout(() => showInputScreen(trial, resolve), 200);
+                }, trial.delayMs);
+            }
+        });
+    }
+    
+    function showInputScreen(trial, resolve) {
+        const isWhole = (trial.type === 'whole');
+        const expectedCount = isWhole ? trial.totalLetters : trial.rowLength;
+        const promptText = `请输入 ${expectedCount} 个字母（按回车提交）`;
+        
+        container.innerHTML = `
+            <div class="screen">
+                <div class="input-prompt">${promptText}</div>
+                <input type="text" id="user-input" class="experiment-input" placeholder="" autocomplete="off">
+                <div class="info-text">${currentTrialIndex + 1} / ${trials.length}</div>
+            </div>
+            <div id="progress-bar" class="progress-bar"></div>
+        `;
+        updateProgress();
+        
+        const inputEl = document.getElementById('user-input');
+        const finishHandler = (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const rawInput = inputEl.value.trim();
+                const userLetters = parseUserInput(rawInput, expectedCount);
+                
+                let absoluteScore = 0, maxPossible = 0, availableLetters = 0;
+                if (isWhole) {
+                    const flatTarget = trial.matrix.flat();
+                    absoluteScore = computeScore(flatTarget, userLetters);
+                    maxPossible = trial.totalLetters;
+                    availableLetters = absoluteScore;
+                } else {
+                    const targetRowArr = trial.matrix[trial.targetRow - 1];
+                    absoluteScore = computeScore(targetRowArr, userLetters);
+                    maxPossible = trial.rowLength;
+                    availableLetters = (absoluteScore / trial.rowLength) * trial.totalLetters;
+                }
+                
+                // delay 值：全部报告法用 65537，其他用实际延迟（毫秒）
+                let delayValue = trial.delayMs;
+                if (trial.type === 'whole') {
+                    delayValue = 65537;
+                }
+                
+                experimentData.push({
+                    name: subjectName,
+                    input: trial.totalLetters,
+                    output: availableLetters,
+                    delay: delayValue
+                });
+                
+                inputEl.removeEventListener('keypress', finishHandler);
+                resolve();
+            }
+        };
+        inputEl.addEventListener('keypress', finishHandler);
+        inputEl.focus();
+    }
+    
+    async function runAllTrials() {
+        for (let i = 0; i < trials.length; i++) {
+            currentTrialIndex = i;
+            await runSingleTrial(trials[i]);
+        }
+        showCompletionScreen();
+    }
+    
+    function showCompletionScreen() {
+        container.innerHTML = `
+            <div class="screen">
+                <div class="title">实验完成</div>
+                <p class="info-text">共完成 ${experimentData.length} 个试次</p>
+                <button id="export-csv">导出数据 (CSV)</button>
+                <button id="restart-btn" style="margin-left:15px;">新被试</button>
+            </div>
+        `;
+        document.getElementById('export-csv')?.addEventListener('click', exportData);
+        document.getElementById('restart-btn')?.addEventListener('click', () => {
+            isRunning = false;
+            showSubjectForm();
+        });
+    }
+    
+    function exportData() {
+        if (experimentData.length === 0) { alert("无数据"); return; }
+        const headers = ['name', 'input', 'output', 'delay'];
+        const rows = [headers.join(',')];
+        for (const row of experimentData) {
+            rows.push(`${row.name},${row.input},${row.output},${row.delay}`);
+        }
+        const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = `Sperling_${subjectName}_${Date.now()}.csv`;
+        a.click();
+        URL.revokeObjectURL(a.href);
+    }
+    
+    async function startExperiment() {
+        if (isRunning) return;
+        isRunning = true;
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        await audioContext.resume();
+        trials = generateTrials();
+        currentTrialIndex = 0;
+        experimentData = [];
+        
+        container.innerHTML = `
+            <div class="screen">
+                <div class="title">斯珀林 (Sperling, 1960) 感觉记忆实验</div>
+                <p class="info-text">字母矩阵仅显示 50 毫秒</p>
+                <p class="info-text"><strong style="color:#ffaa66;">高音</strong> → 第1行 &nbsp;&nbsp; <strong style="color:#ffaa66;">中音</strong> → 第2行 &nbsp;&nbsp; <strong style="color:#ffaa66;">低音</strong> → 第3行</p>
+                <p class="info-text">部分试次音调会延迟出现</p>
+                <p class="info-text">每次出现十字架时，<strong>按空格键</strong>开始下一个试次</p>
+                <p class="info-text">输入字母后，<strong>按回车键</strong>提交</p>
+                <button id="start-exp-btn">开始实验</button>
+            </div>
+        `;
+        document.getElementById('start-exp-btn')?.addEventListener('click', async () => {
+            await runAllTrials();
+        });
+    }
+    
+    function showSubjectForm() {
+        container.innerHTML = `
+            <div class="screen">
+                <div class="title">被试信息</div>
+                <input type="text" id="subj-name-input" placeholder="" style="width:200px; font-size:20px;" maxlength="10">
+                <div><button id="confirm-subj">开始实验</button></div>
+            </div>
+        `;
+        document.getElementById('confirm-subj')?.addEventListener('click', async () => {
+            const name = document.getElementById('subj-name-input').value.trim();
+            if (!name) { alert("请输入被试信息"); return; }
+            subjectName = name;
+            await startExperiment();
+        });
+    }
+    
+    showSubjectForm();
+</script>
+</body>
+</html>
