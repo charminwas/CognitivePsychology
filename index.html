@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sperling (1960) 感觉记忆实验 - 完整矩阵版</title>
     <style>
-        /* ===== 完全保留原有视觉风格 ===== */
         * {
             box-sizing: border-box;
             user-select: none;
@@ -138,12 +137,6 @@
             color: white;
             line-height: 1;
         }
-        .space-hint {
-            font-size: 18px;
-            color: #888;
-            margin-top: 20px;
-            letter-spacing: normal;
-        }
     </style>
 </head>
 <body>
@@ -155,7 +148,8 @@
     
     const AUDIO_FREQS = { low: 250, mid: 1000, high: 2500 };
     const AUDIO_GAIN = { low: 0.42, mid: 0.30, high: 0.12 };
-    const DELAYS = [0, 100, 300, 500, 1000];
+    // 延迟时间：0, 150, 300, 500, 1000 毫秒
+    const DELAYS_MS = [0, 150, 300, 500, 1000];
     
     const MATRIX_TYPES = {
         '2x3': { rows: 2, cols: 3, total: 6, rowLen: 3 },
@@ -254,6 +248,7 @@
     
     function parseUserInput(inputStr, expectedLen) {
         let cleaned = inputStr.toUpperCase().replace(/[^A-Z]/g, '');
+        if (cleaned.length === 0) return [];
         if (!inputStr.includes(' ') && cleaned.length === expectedLen) {
             return cleaned.split('');
         }
@@ -283,7 +278,7 @@
             }
         }
         
-        // 部分报告法：四种矩阵各5次，行平衡
+        // 部分报告法：四种矩阵各5次，行平衡，delayMs = -100（表示提前100ms）
         for (let key of MATRIX_KEYS) {
             const spec = MATRIX_TYPES[key];
             const maxRow = spec.rows;
@@ -301,14 +296,14 @@
                     type: 'partial', rows: spec.rows, cols: spec.cols,
                     totalLetters: spec.total, rowLength: spec.rowLen,
                     matrix: generateMatrix(spec.rows, spec.cols),
-                    targetRow: targetRows[i], delayMs: 0
+                    targetRow: targetRows[i], delayMs: -100  // 提前100ms
                 });
             }
         }
         
         // 延迟报告法：3x3矩阵，20次
         const spec33 = MATRIX_TYPES['3x3'];
-        for (let d of DELAYS) {
+        for (let d of DELAYS_MS) {
             let rowsForDelay = [];
             for (let rep = 0; rep < 4; rep++) {
                 rowsForDelay.push((rep % 3) + 1);
@@ -334,7 +329,6 @@
             displayDiv.innerHTML = `
                 <div class="fixation-container">
                     <div class="fixation-cross">+</div>
-                    <div class="space-hint">按空格键继续</div>
                 </div>
             `;
             const keyHandler = (e) => {
@@ -363,20 +357,31 @@
             await showFixationAndWait();
             const displayDiv = document.getElementById('display-content');
             
-            displayDiv.innerHTML = renderMatrixHTML(trial.matrix, trial.rows, trial.cols);
-            await new Promise(r => setTimeout(r, 50));
-            displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
-            
-            if (trial.type === 'whole') {
-                showInputScreen(trial, resolve);
-            } else if (trial.type === 'partial') {
+            // 根据条件决定音频播放时机
+            if (trial.type === 'partial') {
+                // 部分报告法：音频提前 100ms 播放（在矩阵出现前）
                 playCueByRow(trial.targetRow, trial.rows);
+                await new Promise(r => setTimeout(r, 100));  // 等待100ms
+                displayDiv.innerHTML = renderMatrixHTML(trial.matrix, trial.rows, trial.cols);
+                await new Promise(r => setTimeout(r, 50));
+                displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
                 setTimeout(() => showInputScreen(trial, resolve), 200);
-            } else if (trial.type === 'delayed') {
+            } 
+            else if (trial.type === 'delayed') {
+                // 延迟报告法：先显示矩阵，再延迟，再播放音频
+                displayDiv.innerHTML = renderMatrixHTML(trial.matrix, trial.rows, trial.cols);
+                await new Promise(r => setTimeout(r, 50));
+                displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
                 setTimeout(() => {
                     playCueByRow(trial.targetRow, trial.rows);
                     setTimeout(() => showInputScreen(trial, resolve), 200);
                 }, trial.delayMs);
+            }
+            else { // whole
+                displayDiv.innerHTML = renderMatrixHTML(trial.matrix, trial.rows, trial.cols);
+                await new Promise(r => setTimeout(r, 50));
+                displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
+                showInputScreen(trial, resolve);
             }
         });
     }
@@ -416,10 +421,17 @@
                     availableLetters = (absoluteScore / trial.rowLength) * trial.totalLetters;
                 }
                 
-                // delay 值：全部报告法用 65537，其他用实际延迟（毫秒）
-                let delayValue = trial.delayMs;
+                // delay 值规则：
+                // 全部报告法: 65537
+                // 部分报告法: -0.1 (提前100ms)
+                // 延迟报告法: 秒为单位 (0, 0.15, 0.3, 0.5, 1.0)
+                let delayValue;
                 if (trial.type === 'whole') {
                     delayValue = 65537;
+                } else if (trial.type === 'partial') {
+                    delayValue = -0.1;
+                } else {
+                    delayValue = trial.delayMs / 1000;
                 }
                 
                 experimentData.push({
