@@ -5,9 +5,11 @@ const plotHeight = 250;
 const gap = 50;
 const totalWidth = plotWidth * 2 + gap + margin.left + margin.right;
 const totalHeight = plotHeight * 2 + gap + margin.top + margin.bottom;
+// 衰变图：独立高度（2x2网格，不与其他图重叠）
+const decayTotalHeight = totalHeight; 
 
-//辅助函数：计算单个被试平均值 + 全局平均值
-function getAverage(data) {
+//辅助函数：计算实验1和实验3的单个被试平均值 + 全局平均值
+function getAverageImPa(data) {
     // 获取当前数据集统一的delay值（raw_data_im/pa都是单一delay）
     const fixedDelay = data[0].delay;
     
@@ -34,6 +36,32 @@ function getAverage(data) {
     
     return [...ssAverages, ...globalAverageData];
 }
+//辅助函数：计算实验4的单个被试平均值 + 全局平均值
+function getAverageDe(data){
+    const groupedByName = d3.group(data, d => d.name);
+    const ssAverages = Array.from(groupedByName, ([name, nameItems]) => {
+        const groupedByInputDelay = d3.group(nameItems, d => d.input, d => d.delay);
+        return Array.from(groupedByInputDelay, ([input, delayGroup]) => 
+            Array.from(delayGroup, ([delay, items]) => ({
+                name: name,
+                input: input,
+                output: d3.mean(items, d => d.output),
+                delay: delay // 保留真实delay
+            }))
+        ).flat();
+    }).flat();
+
+    const globalGroup = d3.group(data, d => d.input, d => d.delay);
+    const globalAverageData = Array.from(globalGroup, ([input, delayGroup]) => 
+        Array.from(delayGroup, ([delay, items]) => ({
+            name: 'average',
+            input: input,
+            output: d3.mean(items, d => d.output),
+            delay: delay
+        }))
+    ).flat();
+    return [...ssAverages, ...globalAverageData];
+}
 
 //解析csv，字符串转数字
 d3.csv("data.csv").then(data => {
@@ -55,13 +83,17 @@ d3.csv("data.csv").then(data => {
         return item.delay != 65537
     });
     //得到每个被试的平均值和所有人的平均值数据集
-    const data_im = getAverage(raw_data_im);
-    const data_pa = getAverage(raw_data_pa);
-    const data_de = getAverage(raw_data_de);
+    const data_im = getAverageImPa(raw_data_im);
+    const data_pa = getAverageImPa(raw_data_pa);
+    const data_de = getAverageDe(raw_data_de);
 
 
     //这里是全部报告法与部分报告法的图表区
-    const svg = d3.select("#immediateandpartial")
+    const svg1 = d3.select("#immediateandpartial")
+        .append('svg')
+        .attr('width', totalWidth)
+        .attr('height', totalHeight);
+    const svg2 = d3.select("#decay")
         .append('svg')
         .attr('width', totalWidth)
         .attr('height', totalHeight);
@@ -70,6 +102,10 @@ d3.csv("data.csv").then(data => {
     function drawEachImPa(container, name, data, x, y){
         const im_data = d3.group(data, d => d.delay).get(65537);
         const pa_data = d3.group(data, d => d.delay).get(0);
+        //为了画折线需要排序
+        im_data.sort((a, b) => a.input - b.input);
+        pa_data.sort((a, b) => a.input - b.input);
+
 
         const g = container.append('g')
             .attr('transform', `translate(${x}, ${y})`);
@@ -88,7 +124,7 @@ d3.csv("data.csv").then(data => {
             .x(d => xScale(d))
             .y(d => yScale(d));
         const standardPoints = [0, 12];
-        g.append('path')
+        g.append('path')//实例化
             .attr('d', standardLine(standardPoints))
             .attr('fill', 'none')
             .attr('stroke', '#ff7f0e')
@@ -99,7 +135,7 @@ d3.csv("data.csv").then(data => {
         const im_line = d3.line()
             .x(d => xScale(d.input))
             .y(d => yScale(d.output));
-        g.append('path')
+        g.append('path')//实例化
             .attr('d', im_line(im_data))
             .attr('fill', 'none')
             .attr('stroke', 'steelblue')
@@ -119,7 +155,7 @@ d3.csv("data.csv").then(data => {
         const pa_line = d3.line()
             .x(d => xScale(d.input))
             .y(d => yScale(d.output));
-        g.append('path')
+        g.append('path')//实例化
             .attr('d', pa_line(pa_data))
             .attr('fill', 'none')
             .attr('stroke', 'red')
@@ -145,7 +181,7 @@ d3.csv("data.csv").then(data => {
             .call(d3.axisLeft(yScale).ticks(6))
             .style('font-size', '12px');
 
-        //图例区，之后需要写上Ss的名字
+        //图例区（Ss的名字）
         g.append('text')
             .attr('x', plotWidth - 150)
             .attr('y', 40)
@@ -155,13 +191,16 @@ d3.csv("data.csv").then(data => {
             .text(name);
     }
 
-    function DrawEachDecay(container, name, data, x, y){
+    function DrawEachDecay(container, name, de_data, im_data, x, y){
+        //只要3x3矩阵的
+        im_data = im_data.filter(item => item.input === 9);
+        de_data = de_data.sort((a, b) => a.delay - b.delay);
         const g = container.append('g')
             .attr('transform', `translate(${x}, ${y})`);
 
         //x轴y轴 论文里图有两条y轴，左边是正确数目右边是正确率
         const xScale = d3.scaleLinear()
-            .domain([-0.15, 1.05])
+            .domain([-0.15, 1.25])//稍微大一点留点空隙
             .range([0, plotWidth])
         const yScaleLeft = d3.scaleLinear()
             .domain([0, 9])
@@ -170,6 +209,27 @@ d3.csv("data.csv").then(data => {
             .domain([0, 100])
             .range([plotHeight, 0])
 
+        //实验数据的线
+        const line = d3.line()
+            .x(d => xScale(d.delay))
+            .y(d => yScaleLeft(d.output));
+        g.append('path')//实例化
+            .attr('d', line(de_data))
+            .attr('fill', 'none')
+            .attr('stroke', 'red')
+            .attr('stroke-width', 2);
+        //实验数据的点
+        g.selectAll('.circle')
+            .data(de_data)
+            .enter()
+            .append('circle')
+            .attr('class', 'circle')
+            .attr('cx', d => xScale(d.delay))
+            .attr('cy', d => yScaleLeft(d.output))
+            .attr('r', 3)
+            .attr('fill', 'red');
+        
+        //补充各个轴的特征并实例化
         const xTickValues = [-0.1, 0, 0.15, 0.3, 0.5, 1.0];
         const yTickValuesLeft = [2, 4, 6, 8, 9];
         const yTickValuesRight = [0, 25, 50, 75, 100];
@@ -181,16 +241,50 @@ d3.csv("data.csv").then(data => {
             .call(d3.axisLeft(yScaleLeft).tickValues(yTickValuesLeft))
             .style('font-size', '12px');
         g.append('g')
+            .attr('transform', `translate(${plotWidth}, 0)`) 
             .call(d3.axisRight(yScaleRight).tickValues(yTickValuesRight))
             .style('font-size', '12px');
+
+        //添加左右柱子（右代表全部报告法在3x3下能报告出的平均值）
+        g.append('rect')
+            .attr('x', xScale(-0.05))
+            .attr('width', xScale(0) - xScale(-0.05))
+            .attr('y', yScaleLeft(1))
+            .attr('height', plotHeight - yScaleLeft(1))
+            .attr('fill', '#000')
+        const imValue = im_data[0]?.output || 0;
+        g.append('rect')
+            .attr('x', xScale(1.18))
+            .attr('width', xScale(1.23) - xScale(1.18))
+            .attr('y', yScaleLeft(imValue))
+            .attr('height', plotHeight - yScaleLeft(imValue))
+            .attr('fill', '#000')
+        //图例区（Ss的名字）
+        g.append('text')
+            .attr('x', plotWidth - 150)
+            .attr('y', 40)
+            .attr('text-anchor', 'end')
+            .style('font-size', '20px')
+            .style('fill', '#6f00ff')
+            .text(name);
     }
 
     //绘图部分
     const mergedData = [...data_im, ...data_pa];
     const grouped_data = d3.group(mergedData, d => d.name);
 
-    drawEachImPa(svg, 'Average', grouped_data.get('average'), margin.left, margin.top);
-    drawEachImPa(svg, 'C', grouped_data.get('C'), margin.left + plotWidth + gap, margin.top);
-    drawEachImPa(svg, 'L', grouped_data.get('L'), margin.left, margin.top + plotHeight + gap);
-    drawEachImPa(svg, 'W', grouped_data.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
+    drawEachImPa(svg1, 'Average', grouped_data.get('average'), margin.left, margin.top);
+    drawEachImPa(svg1, 'C', grouped_data.get('C'), margin.left + plotWidth + gap, margin.top);
+    drawEachImPa(svg1, 'L', grouped_data.get('L'), margin.left, margin.top + plotHeight + gap);
+    drawEachImPa(svg1, 'W', grouped_data.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
+
+    //绘图部分 - 实验4（衰变图）✅ 修复4：正确传递对应被试的im数据 + 修正Y坐标
+    const grouped_de = d3.group(data_de, d => d.name);
+    const grouped_im = d3.group(data_im, d => d.name); // 按被试分组实验1数据
+
+    // ✅ 修复5：衰变图从顶部开始画（不超出SVG），标准2x2布局
+    DrawEachDecay(svg2, 'Avg-Decay', grouped_de.get('average'), grouped_im.get('average'), margin.left, margin.top);
+    DrawEachDecay(svg2, 'C-Decay', grouped_de.get('C'), grouped_im.get('C'), margin.left + plotWidth + gap, margin.top);
+    DrawEachDecay(svg2, 'L-Decay', grouped_de.get('L'), grouped_im.get('L'), margin.left, margin.top + plotHeight + gap);
+    DrawEachDecay(svg2, 'W-Decay', grouped_de.get('W'), grouped_im.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
 });
