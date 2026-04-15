@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sperling (1960) 感觉记忆实验 - 完整矩阵版</title>
+    <title>Sperling (1960) 感觉记忆实验</title>
     <style>
         * {
             box-sizing: border-box;
@@ -290,70 +290,45 @@
         let parts = cleaned.split('');
         return parts.slice(0, expectedLen);
     }
-    
-    function updateProgress() {
-        let pct = (currentTrialIndex / trials.length) * 100;
-        let bar = document.getElementById('progress-bar');
-        if (bar) bar.style.width = pct + '%';
-    }
-    
+
     function generateTrials() {
         let trialList = [];
-        
-        // 全部报告法：四种矩阵各5次
-        for (let key of MATRIX_KEYS) {
-            const spec = MATRIX_TYPES[key];
-            for (let i = 0; i < 5; i++) {
-                trialList.push({
-                    type: 'whole', rows: spec.rows, cols: spec.cols,
-                    totalLetters: spec.total, rowLength: spec.rowLen,
-                    matrix: generateMatrix(spec.rows, spec.cols),
-                    targetRow: null, delayMs: null
-                });
-            }
-        }
-        
-        // 部分报告法：四种矩阵各5次，行平衡，delayMs = -100（表示提前100ms）
+
+        // 试次生成：每一种 "delay + input形状(矩阵类型)" 组合固定 20 次
+        // 组合内部：矩阵字母随机；提示行（targetRow）在同一组合内尽量均衡分配
+        const REPS_PER_COMBO = 20;
+
         for (let key of MATRIX_KEYS) {
             const spec = MATRIX_TYPES[key];
             const maxRow = spec.rows;
-            let targetRows = [];
-            for (let r = 1; r <= maxRow; r++) {
-                let count = Math.floor(5 / maxRow);
-                for (let c = 0; c < count; c++) targetRows.push(r);
-            }
-            while(targetRows.length < 5) {
-                for (let r = 1; r <= maxRow && targetRows.length < 5; r++) targetRows.push(r);
-            }
-            targetRows = shuffleArray(targetRows.slice(0,5));
-            for (let i = 0; i < 5; i++) {
-                trialList.push({
-                    type: 'partial', rows: spec.rows, cols: spec.cols,
-                    totalLetters: spec.total, rowLength: spec.rowLen,
-                    matrix: generateMatrix(spec.rows, spec.cols),
-                    targetRow: targetRows[i], delayMs: -100  // 提前100ms
-                });
-            }
-        }
-        
-        // 延迟报告法：3x3矩阵，20次
-        const spec33 = MATRIX_TYPES['3x3'];
-        for (let d of DELAYS_MS) {
-            let rowsForDelay = [];
-            for (let rep = 0; rep < 4; rep++) {
-                rowsForDelay.push((rep % 3) + 1);
-            }
-            rowsForDelay = shuffleArray(rowsForDelay);
-            for (let i = 0; i < 4; i++) {
-                trialList.push({
-                    type: 'delayed', rows: spec33.rows, cols: spec33.cols,
-                    totalLetters: spec33.total, rowLength: spec33.rowLen,
-                    matrix: generateMatrix(spec33.rows, spec33.cols),
-                    targetRow: rowsForDelay[i], delayMs: d
-                });
+
+            for (let d of DELAYS_MS) {
+                let targetRows = [];
+                const baseCount = Math.floor(REPS_PER_COMBO / maxRow);
+                const remainder = REPS_PER_COMBO % maxRow;
+
+                for (let r = 1; r <= maxRow; r++) {
+                    for (let c = 0; c < baseCount; c++) targetRows.push(r);
+                }
+                for (let r = 1; r <= remainder; r++) targetRows.push(r);
+
+                targetRows = shuffleArray(targetRows);
+
+                for (let i = 0; i < REPS_PER_COMBO; i++) {
+                    trialList.push({
+                        type: 'delayed',
+                        rows: spec.rows,
+                        cols: spec.cols,
+                        totalLetters: spec.total,
+                        rowLength: spec.rowLen,
+                        matrix: generateMatrix(spec.rows, spec.cols),
+                        targetRow: targetRows[i],
+                        delayMs: d
+                    });
+                }
             }
         }
-        
+
         return shuffleArray(trialList);
     }
     
@@ -426,9 +401,7 @@
                         <div id="display-content"></div>
                     </div>
                 </div>
-                <div id="progress-bar" class="progress-bar"></div>
             `;
-            updateProgress();
             
             await showFixationAndWait();
             if (abortRequested) { resolve(); return; }
@@ -488,11 +461,8 @@
                 <div class="input-prompt">${promptText}${rowLabel}</div>
                 <div class="recall-grid" id="recall-grid" style="${gridTemplate}">${cellsHtml}</div>
                 <div class="hint-row" id="recall-hint">${detailText}</div>
-                <div class="info-text">${currentTrialIndex + 1} / ${trials.length}</div>
             </div>
-            <div id="progress-bar" class="progress-bar"></div>
         `;
-        updateProgress();
 
         const inputs = Array.from(document.querySelectorAll('.recall-cell'));
         const normalizeChar = (val) => {
