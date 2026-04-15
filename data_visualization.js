@@ -64,7 +64,7 @@ function getAverageDe(data){
 }
 
 //解析csv，字符串转数字
-d3.csv("Sperling_C_1776169148369.csv").then(data => {
+d3.csv("Sperling_C_COMPLETE_1776180770869.csv").then(data => {
     // 字符串转数字
     data.forEach(d => {
         d.input = +d.input;
