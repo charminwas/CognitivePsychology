@@ -58,12 +58,10 @@
 <body>
     <div id="status" class="status">
         <div><strong>数据可视化</strong></div>
-        <div class="small" id="status-text">正在查找同级目录下的 CSV 文件并加载……</div>
-        <div class="small" style="margin-top:8px;">
-            <label>
-                <input id="csv-picker" type="file" accept=".csv" multiple style="display:none;">
-                <button id="csv-picker-btn" type="button">手动选择 CSV（备用）</button>
-            </label>
+        <div class="small" id="status-text">请选择一个或多个 CSV 文件（Sperling 导出的格式）。</div>
+        <div class="small" style="margin-top:10px; display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+            <input id="csv-picker" type="file" accept=".csv,text/csv" multiple>
+            <button id="clear-btn" type="button">清空</button>
         </div>
     </div>
 
