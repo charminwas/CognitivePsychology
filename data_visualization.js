@@ -62,14 +62,19 @@ function getAverageDe(data){
     ).flat();
     return [...ssAverages, ...globalAverageData];
 }
+//辅助函数：空/缺失数据=NaN
+function safeNum(n){
+    if (n === '' || n === null) return NaN;
+    return +n;
+}
 
 //解析csv，字符串转数字
 d3.csv("Sperling_C_COMPLETE_1776180770869.csv").then(data => {
     // 字符串转数字
     data.forEach(d => {
-        d.input = +d.input;
-        d.output = +d.output;
-        d.delay = +d.delay;
+        d.input = safeNum(d.input);
+        d.output = safeNum(d.output);
+        d.delay = safeNum(d.delay);
     });
 
     //实验1、实验3的数据和实验4的数据分开
@@ -135,7 +140,8 @@ d3.csv("Sperling_C_COMPLETE_1776180770869.csv").then(data => {
         //全部报告法实验数据的线
         const im_line = d3.line()
             .x(d => xScale(d.input))
-            .y(d => yScale(d.output));
+            .y(d => yScale(d.output))
+            .defined(d => !isNaN(d.output));
         g.append('path')//实例化
             .attr('d', im_line(im_data))
             .attr('fill', 'none')
@@ -171,7 +177,8 @@ d3.csv("Sperling_C_COMPLETE_1776180770869.csv").then(data => {
         //部分报告法实验数据的线
         const pa_line = d3.line()
             .x(d => xScale(d.input))
-            .y(d => yScale(d.output));
+            .y(d => yScale(d.output))
+            .defined(d => !isNaN(d.output));
         g.append('path')//实例化
             .attr('d', pa_line(pa_data))
             .attr('fill', 'none')
@@ -223,14 +230,14 @@ d3.csv("Sperling_C_COMPLETE_1776180770869.csv").then(data => {
             .text(name);
     }
 
-    function DrawEachDecay(container, name, de_data, im_data, x, y){
+    function drawEachDecay(container, name, de_data, im_data, x, y){
         if (!de_data || de_data.length === 0) {
         console.warn(`衰变图【${name}】无数据`);
         return;
         }
         //只要3x3矩阵的
         im_data = im_data?.filter(item => item.input == 9) || [];
-        de_data = [...de_data].sort((a,b)=>a.delay - b.delay);
+        de_data = [...(de_data || [])].sort((a,b) => (a.delay || 0) - (b.delay || 0));
         const g = container.append('g')
             .attr('transform', `translate(${x}, ${y})`);
 
@@ -254,7 +261,8 @@ d3.csv("Sperling_C_COMPLETE_1776180770869.csv").then(data => {
         //实验数据的线
         const line = d3.line()
             .x(d => xScale(d.delay))
-            .y(d => yScaleLeft(d.output));
+            .y(d => yScaleLeft(d.output))
+            .defined(d => !isNaN(d.output));;
         g.append('path')//实例化
             .attr('d', line(de_data))
             .attr('fill', 'none')
@@ -309,7 +317,7 @@ d3.csv("Sperling_C_COMPLETE_1776180770869.csv").then(data => {
             .attr('y', yScaleLeft(1))
             .attr('height', plotHeight - yScaleLeft(1))
             .attr('fill', '#000')
-        const imValue = im_data.length > 0 ? im_data[0].output : 0;
+        const imValue = (im_data.length > 0 && !isNaN(im_data[0].output)) ? im_data[0].output : 0;
         const imValuePercentage = (imValue / 9) * 100
         g.append('rect')
             .attr('x', xScale(1.18))
@@ -359,8 +367,8 @@ d3.csv("Sperling_C_COMPLETE_1776180770869.csv").then(data => {
     const grouped_im = d3.group(data_im, d => d.name); // 按被试分组实验1数据
 
     // ✅ 修复5：衰变图从顶部开始画（不超出SVG），标准2x2布局
-    //DrawEachDecay(svg2, 'Average', grouped_de.get('average'), grouped_im.get('average'), margin.left, margin.top);
-    DrawEachDecay(svg2, 'C', grouped_de.get('C'), grouped_im.get('C'), margin.left + plotWidth + gap, margin.top);
-    //DrawEachDecay(svg2, 'L', grouped_de.get('L'), grouped_im.get('L'), margin.left, margin.top + plotHeight + gap);
-    //DrawEachDecay(svg2, 'W', grouped_de.get('W'), grouped_im.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
+    //drawEachDecay(svg2, 'Average', grouped_de.get('average'), grouped_im.get('average'), margin.left, margin.top);
+    drawEachDecay(svg2, 'C', grouped_de.get('C'), grouped_im.get('C'), margin.left + plotWidth + gap, margin.top);
+    //drawEachDecay(svg2, 'L', grouped_de.get('L'), grouped_im.get('L'), margin.left, margin.top + plotHeight + gap);
+    //drawEachDecay(svg2, 'W', grouped_de.get('W'), grouped_im.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
 });
