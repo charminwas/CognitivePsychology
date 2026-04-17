@@ -10,7 +10,6 @@ const decayTotalHeight = totalHeight;
 
 //辅助函数：计算实验1和实验3的单个被试平均值 + 全局平均值
 function getAverageImPa(data) {
-    if (!data || data.length === 0) return [];
     // 获取当前数据集统一的delay值（raw_data_im/pa都是单一delay）
     const fixedDelay = data[0].delay;
     
@@ -39,7 +38,6 @@ function getAverageImPa(data) {
 }
 //辅助函数：计算实验4的单个被试平均值 + 全局平均值
 function getAverageDe(data){
-    if (!data || data.length === 0) return [];
     const groupedByName = d3.group(data, d => d.name);
     const ssAverages = Array.from(groupedByName, ([name, nameItems]) => {
         const groupedByInputDelay = d3.group(nameItems, d => d.input, d => d.delay);
@@ -71,69 +69,45 @@ function safeNum(n){
 }
 
 //解析csv，字符串转数字
-function coerceRows(data) {
+d3.csv("Sperling_C_COMPLETE_1776180770869.csv").then(data => {
+    // 字符串转数字
     data.forEach(d => {
         d.input = safeNum(d.input);
         d.output = safeNum(d.output);
         d.delay = safeNum(d.delay);
-        d.name = String(d.name ?? '').trim();
     });
-    return data;
-}
 
-function setStatus(text) {
-    const el = document.getElementById('status-text');
-    if (el) el.textContent = text;
-}
-
-function clearCharts() {
-    d3.select("#subjects").selectAll("*").remove();
-}
-
-async function readCsvFiles(files) {
-    const list = Array.from(files || []);
-    const texts = await Promise.all(list.map(f => f.text()));
-    const parsed = texts.flatMap((t) => d3.csvParse(t));
-    return coerceRows(parsed);
-}
-
-function renderAll(data) {
-    clearCharts();
-    if (!data || data.length === 0) {
-        setStatus("未加载到有效数据。请上传 CSV。");
-        return;
-    }
-
-    // ======= 按实验分组 =======
-    const subjectsRoot = document.getElementById('subjects');
-    if (!subjectsRoot) {
-        setStatus("页面缺少容器（subjects）。");
-        return;
-    }
-
-    const safeId = (s) => String(s).replace(/[^A-Za-z0-9_-]/g, "_") || "unknown";
-
-    // 实验1（全部报告法）：delay = 65537
-    const raw_data_im = d3.filter(data, (item) => item.delay == 65537);
-
-    // 实验3（部分报告法）：delay = 0
-    const raw_data_pa = d3.filter(data, (item) => item.delay == 0);
-
-    // 实验4（时间延迟）：3x3(input=9) 且 delay ∈ {-0.1, 0.3, 0.5, 1.0}
-    const exp4DelaySet = new Set([-0.1, 0.3, 0.5, 1.0]);
-    const raw_data_de = d3.filter(data, (item) => item.input == 9 && exp4DelaySet.has(item.delay));
-
-    // 得到每个被试的平均值和所有人的平均值数据集
+    //实验1、实验3的数据和实验4的数据分开
+    const raw_data_im = d3.filter(data, (item) => {
+        return item.delay == 65537
+    });
+    const raw_data_pa = d3.filter(data, (item) => {
+        return item.delay == 0
+    });
+    const raw_data_de = d3.filter(data, (item) => {
+        return item.delay != 65537 && item.input == 9
+    });
+    //得到每个被试的平均值和所有人的平均值数据集
     const data_im = getAverageImPa(raw_data_im);
     const data_pa = getAverageImPa(raw_data_pa);
     const data_de = getAverageDe(raw_data_de);
 
+
+    //这里是全部报告法与部分报告法的图表区
+    const svg1 = d3.select("#immediateandpartial")
+        .append('svg')
+        .attr('width', totalWidth)
+        .attr('height', totalHeight);
+    const svg2 = d3.select("#decay")
+        .append('svg')
+        .attr('width', totalWidth)
+        .attr('height', decayTotalHeight)
+        .style("border", "1px solid #000"); // 新增
+
     //画单个图表的函数
     function drawEachImPa(container, name, data, x, y){
-        const safeData = Array.isArray(data) ? data : [];
-        const grouped = d3.group(safeData, d => d.delay);
-        const im_data = (grouped.get(65537) || []).slice();
-        const pa_data = (grouped.get(0) || []).slice();
+        const im_data = d3.group(data, d => d.delay).get(65537);
+        const pa_data = d3.group(data, d => d.delay).get(0);
         //为了画折线需要排序
         im_data.sort((a, b) => a.input - b.input);
         pa_data.sort((a, b) => a.input - b.input);
@@ -168,77 +142,73 @@ function renderAll(data) {
             .x(d => xScale(d.input))
             .y(d => yScale(d.output))
             .defined(d => !isNaN(d.output));
-        if (im_data.length > 0) {
-            g.append('path')//实例化
-                .attr('d', im_line(im_data))
-                .attr('fill', 'none')
-                .attr('stroke', 'steelblue')
-                .attr('stroke-width', 2);
-            //实验数据的点
-            g.selectAll('.circle-im')
-                .data(im_data)
-                .enter()
-                .append('circle')
-                .attr('class', 'circle-im')
-                .attr('cx', d => xScale(d.input))
-                .attr('cy', d => yScale(d.output))
-                .attr('r', 3)
-                .attr('fill', 'steelblue')
-                .attr('title', d => `input:${d.input} output:${d.output}`)
-                //鼠标悬浮显示具体数值
-                .on('mouseover', function(e, d) {
-                    d3.select(this).attr('r', 6);
-                    // 文字显示在点正下方
-                    g.append('text')
-                        .attr('class', 'tip')
-                        .attr('text-anchor', 'middle')  // 水平居中
-                        .attr('x', xScale(d.input))
-                        .attr('y', yScale(d.output) + 15) // 向下偏移
-                        .text(`input: ${d.input}, output: ${d.output.toFixed(2)}`);
-                })
-                .on('mouseout', function() {
-                    d3.select(this).attr('r', 3);
-                    d3.selectAll('.tip').remove();
-                });
-        }
+        g.append('path')//实例化
+            .attr('d', im_line(im_data))
+            .attr('fill', 'none')
+            .attr('stroke', 'steelblue')
+            .attr('stroke-width', 2);
+        //实验数据的点
+        g.selectAll('.circle-im')
+            .data(im_data)
+            .enter()
+            .append('circle')
+            .attr('class', 'circle-im')
+            .attr('cx', d => xScale(d.input))
+            .attr('cy', d => yScale(d.output))
+            .attr('r', 3)
+            .attr('fill', 'steelblue')
+            .attr('title', d => `input:${d.input} output:${d.output}`)
+            //鼠标悬浮显示具体数值
+            .on('mouseover', function(e, d) {
+                d3.select(this).attr('r', 6);
+                // 文字显示在点正下方
+                g.append('text')
+                    .attr('class', 'tip')
+                    .attr('text-anchor', 'middle')  // 水平居中
+                    .attr('x', xScale(d.input))
+                    .attr('y', yScale(d.output) + 15) // 向下偏移
+                    .text(`input: ${d.input}, output: ${d.output.toFixed(2)}`);
+            })
+            .on('mouseout', function() {
+                d3.select(this).attr('r', 3);
+                d3.selectAll('.tip').remove();
+            });
 
         //部分报告法实验数据的线
         const pa_line = d3.line()
             .x(d => xScale(d.input))
             .y(d => yScale(d.output))
             .defined(d => !isNaN(d.output));
-        if (pa_data.length > 0) {
-            g.append('path')//实例化
-                .attr('d', pa_line(pa_data))
-                .attr('fill', 'none')
-                .attr('stroke', 'red')
-                .attr('stroke-width', 2);
-            //实验数据的点
-            g.selectAll('.circle-pa')
-                .data(pa_data)
-                .enter()
-                .append('circle')
-                .attr('class', 'circle-pa')
-                .attr('cx', d => xScale(d.input))
-                .attr('cy', d => yScale(d.output))
-                .attr('r', 3)
-                .attr('fill', 'red')
-                //鼠标悬浮显示具体数值
-                .on('mouseover', function(e, d) {
-                    d3.select(this).attr('r', 6);
-                    // 文字显示在点正下方
-                    g.append('text')
-                        .attr('class', 'tip')
-                        .attr('text-anchor', 'middle')  // 水平居中
-                        .attr('x', xScale(d.input))
-                        .attr('y', yScale(d.output) + 15) // 向下偏移
-                        .text(`input: ${d.input}, output: ${d.output.toFixed(2)}`);
-                })
-                .on('mouseout', function() {
-                    d3.select(this).attr('r', 3);
-                    d3.selectAll('.tip').remove();
-                });
-        }
+        g.append('path')//实例化
+            .attr('d', pa_line(pa_data))
+            .attr('fill', 'none')
+            .attr('stroke', 'red')
+            .attr('stroke-width', 2);
+        //实验数据的点
+        g.selectAll('.circle-pa')
+            .data(pa_data)
+            .enter()
+            .append('circle')
+            .attr('class', 'circle-pa')
+            .attr('cx', d => xScale(d.input))
+            .attr('cy', d => yScale(d.output))
+            .attr('r', 3)
+            .attr('fill', 'red')
+            //鼠标悬浮显示具体数值
+            .on('mouseover', function(e, d) {
+                d3.select(this).attr('r', 6);
+                // 文字显示在点正下方
+                g.append('text')
+                    .attr('class', 'tip')
+                    .attr('text-anchor', 'middle')  // 水平居中
+                    .attr('x', xScale(d.input))
+                    .attr('y', yScale(d.output) + 15) // 向下偏移
+                    .text(`input: ${d.input}, output: ${d.output.toFixed(2)}`);
+            })
+            .on('mouseout', function() {
+                d3.select(this).attr('r', 3);
+                d3.selectAll('.tip').remove();
+            });
         
         //我们实验只会出现这几个值
         const xTickValues = [6, 8, 9, 12];
@@ -383,105 +353,22 @@ function renderAll(data) {
             .text(name);
     }
 
-    const getNames = (rows) =>
-        Array.from(new Set((rows || []).map(r => r.name).filter(Boolean)))
-            .filter(n => n !== 'average')
-            .sort((a, b) => a.localeCompare(b));
+    //实验1，3的绘图部分
+    const mergedData = [...data_im, ...data_pa];
+    const grouped_data = d3.group(mergedData, d => d.name);
 
-    const exp1Names = getNames(raw_data_im);
-    const exp3Names = getNames(raw_data_pa);
-    const exp4Names = getNames(raw_data_de);
+    drawEachImPa(svg1, 'Average', grouped_data.get('average'), margin.left, margin.top);
+    drawEachImPa(svg1, 'C', grouped_data.get('C'), margin.left + plotWidth + gap, margin.top);
+    //drawEachImPa(svg1, 'L', grouped_data.get('L'), margin.left, margin.top + plotHeight + gap);
+    //drawEachImPa(svg1, 'W', grouped_data.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
 
-    const addSection = (title, subtitle) => {
-        const section = document.createElement('div');
-        section.className = 'subject';
-        section.innerHTML = `
-            <div class="subject-title">${title}</div>
-            ${subtitle ? `<div class="small" style="color:#555; margin:-4px 0 10px 0;">${subtitle}</div>` : ``}
-            <div class="charts" data-section-body></div>
-        `;
-        subjectsRoot.appendChild(section);
-        return section.querySelector('[data-section-body]');
-    };
+    //绘图部分 - 实验4（衰变图）✅ 修复4：正确传递对应被试的im数据 + 修正Y坐标
+    const grouped_de = d3.group(data_de, d => d.name);
+    const grouped_im = d3.group(data_im, d => d.name); // 按被试分组实验1数据
 
-    const addSingleChartCard = (parent, name, containerId, chartTitle) => {
-        const card = document.createElement('div');
-        card.className = 'chart-card';
-        card.innerHTML = `
-            <div class="chart-title">${chartTitle} · ${name}</div>
-            <div id="${containerId}"></div>
-        `;
-        parent.appendChild(card);
-    };
-
-    // ==== 实验1：全部报告法（每个被试一张图）====
-    const body1 = addSection("实验1（全部报告法）", "delay=65537；每个被试一张 input→output 图");
-    const data_im_byName = d3.group(data_im, d => d.name);
-    const exp1Keys = ['average', ...exp1Names];
-    for (const key of exp1Keys) {
-        const showName = (key === 'average') ? 'Average' : key;
-        const id = `exp1_${safeId(key)}`;
-        addSingleChartCard(body1, showName, id, "Experiment 1");
-        const svg = d3.select(`#${id}`).append('svg').attr('width', totalWidth).attr('height', totalHeight);
-        drawEachImPa(svg, showName, data_im_byName.get(key), margin.left, margin.top);
-    }
-
-    // ==== 实验3：部分报告法（每个被试一张图）====
-    const body3 = addSection("实验3（部分报告法）", "delay=0；每个被试一张 input→output 图");
-    const data_pa_byName = d3.group(data_pa, d => d.name);
-    const exp3Keys = ['average', ...exp3Names];
-    for (const key of exp3Keys) {
-        const showName = (key === 'average') ? 'Average' : key;
-        const id = `exp3_${safeId(key)}`;
-        addSingleChartCard(body3, showName, id, "Experiment 3");
-        const svg = d3.select(`#${id}`).append('svg').attr('width', totalWidth).attr('height', totalHeight);
-        drawEachImPa(svg, showName, data_pa_byName.get(key), margin.left, margin.top);
-    }
-
-    // ==== 实验4：时间延迟（每个被试一张图）====
-    const body4 = addSection("实验4（时间延迟）", "input=9 且 delay∈{-0.1,0.3,0.5,1.0}；每个被试一张 decay 图");
-    const data_de_byName = d3.group(data_de, d => d.name);
-    const data_im_avg_byName = d3.group(data_im, d => d.name); // 用于右侧柱子（实验1的3x3平均）
-    const exp4Keys = ['average', ...exp4Names];
-    for (const key of exp4Keys) {
-        const showName = (key === 'average') ? 'Average' : key;
-        const id = `exp4_${safeId(key)}`;
-        addSingleChartCard(body4, showName, id, "Experiment 4");
-        const svg = d3.select(`#${id}`).append('svg').attr('width', totalWidth).attr('height', decayTotalHeight);
-        drawEachDecay(svg, showName, data_de_byName.get(key), data_im_avg_byName.get(key), margin.left, margin.top);
-    }
-}
-
-function initUploader() {
-    const picker = document.getElementById('csv-picker');
-    const clearBtn = document.getElementById('clear-btn');
-
-    if (!picker) {
-        setStatus("页面缺少文件选择控件（csv-picker）。");
-        return;
-    }
-
-    picker.addEventListener('change', async () => {
-        try {
-            setStatus("正在读取 CSV…");
-            const data = await readCsvFiles(picker.files);
-            const uniqueNames = new Set(data.map(d => d.name).filter(Boolean));
-            setStatus(`已加载 ${data.length} 行数据（被试数：${uniqueNames.size}）。`);
-            renderAll(data);
-        } catch (e) {
-            console.error(e);
-            setStatus("读取失败：请确认 CSV 格式正确。");
-            clearCharts();
-        }
-    });
-
-    clearBtn?.addEventListener('click', () => {
-        picker.value = "";
-        clearCharts();
-        setStatus("已清空。请重新选择 CSV。");
-    });
-
-    setStatus("请选择一个或多个 CSV 文件。");
-}
-
-initUploader();
+    // ✅ 修复5：衰变图从顶部开始画（不超出SVG），标准2x2布局
+    //drawEachDecay(svg2, 'Average', grouped_de.get('average'), grouped_im.get('average'), margin.left, margin.top);
+    drawEachDecay(svg2, 'C', grouped_de.get('C'), grouped_im.get('C'), margin.left + plotWidth + gap, margin.top);
+    //drawEachDecay(svg2, 'L', grouped_de.get('L'), grouped_im.get('L'), margin.left, margin.top + plotHeight + gap);
+    //drawEachDecay(svg2, 'W', grouped_de.get('W'), grouped_im.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
+});
