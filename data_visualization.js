@@ -69,7 +69,7 @@ function safeNum(n){
 }
 
 //解析csv，字符串转数字
-d3.csv("Sperling_C_COMPLETE_1776180770869.csv").then(data => {
+d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
     // 字符串转数字
     data.forEach(d => {
         d.input = safeNum(d.input);
