@@ -182,8 +182,10 @@
     
     const AUDIO_FREQS = { low: 250, mid: 1000, high: 2500 };
     const AUDIO_GAIN = { low: 0.42, mid: 0.30, high: 0.12 };
-    // 延迟时间：0, 150, 300, 500, 1000 毫秒
-    const DELAYS_MS = [0, 150, 300, 500, 1000];
+
+    // 实验4：控制矩阵形状不变(3x3)，改变线索时延（单位ms）
+    // -100ms 表示线索提前 100ms（对应 delay=-0.1s）
+    const EXP4_DELAYS_MS = [-100, 300, 500, 1000];
     
     const MATRIX_TYPES = {
         '2x3': { rows: 2, cols: 3, total: 6, rowLen: 3 },
@@ -291,41 +293,74 @@
         return parts.slice(0, expectedLen);
     }
 
+    function buildBalancedTargetRows(maxRow, count) {
+        let targetRows = [];
+        const baseCount = Math.floor(count / maxRow);
+        const remainder = count % maxRow;
+        for (let r = 1; r <= maxRow; r++) {
+            for (let c = 0; c < baseCount; c++) targetRows.push(r);
+        }
+        for (let r = 1; r <= remainder; r++) targetRows.push(r);
+        return shuffleArray(targetRows);
+    }
+
     function generateTrials() {
         let trialList = [];
 
-        // 试次生成：每一种 "delay + input形状(矩阵类型)" 组合固定 20 次
-        // 组合内部：矩阵字母随机；提示行（targetRow）在同一组合内尽量均衡分配
+        // 你指定的 12 组条件：
+        // 实验1(全部报告法)：4种矩阵
+        // 实验3(部分报告法)：同上，固定延迟=0s
+        // 实验4(控制矩阵3x3)：延迟=-0.1/0.3/0.5/1.0s
         const REPS_PER_COMBO = 20;
 
+        // 实验1：全部报告法（whole）
         for (let key of MATRIX_KEYS) {
             const spec = MATRIX_TYPES[key];
-            const maxRow = spec.rows;
+            for (let i = 0; i < REPS_PER_COMBO; i++) {
+                trialList.push({
+                    type: 'whole',
+                    rows: spec.rows,
+                    cols: spec.cols,
+                    totalLetters: spec.total,
+                    rowLength: spec.rowLen,
+                    matrix: generateMatrix(spec.rows, spec.cols)
+                });
+            }
+        }
 
-            for (let d of DELAYS_MS) {
-                let targetRows = [];
-                const baseCount = Math.floor(REPS_PER_COMBO / maxRow);
-                const remainder = REPS_PER_COMBO % maxRow;
+        // 实验3：部分报告法（partial），固定延迟=0s（线索在矩阵消失后立刻出现）
+        for (let key of MATRIX_KEYS) {
+            const spec = MATRIX_TYPES[key];
+            const targetRows = buildBalancedTargetRows(spec.rows, REPS_PER_COMBO);
+            for (let i = 0; i < REPS_PER_COMBO; i++) {
+                trialList.push({
+                    type: 'partial',
+                    rows: spec.rows,
+                    cols: spec.cols,
+                    totalLetters: spec.total,
+                    rowLength: spec.rowLen,
+                    matrix: generateMatrix(spec.rows, spec.cols),
+                    targetRow: targetRows[i],
+                    delayMs: 0
+                });
+            }
+        }
 
-                for (let r = 1; r <= maxRow; r++) {
-                    for (let c = 0; c < baseCount; c++) targetRows.push(r);
-                }
-                for (let r = 1; r <= remainder; r++) targetRows.push(r);
-
-                targetRows = shuffleArray(targetRows);
-
-                for (let i = 0; i < REPS_PER_COMBO; i++) {
-                    trialList.push({
-                        type: 'delayed',
-                        rows: spec.rows,
-                        cols: spec.cols,
-                        totalLetters: spec.total,
-                        rowLength: spec.rowLen,
-                        matrix: generateMatrix(spec.rows, spec.cols),
-                        targetRow: targetRows[i],
-                        delayMs: d
-                    });
-                }
+        // 实验4：3x3，改变时延（含 -0.1s 线索提前）
+        const spec = MATRIX_TYPES['3x3'];
+        for (let d of EXP4_DELAYS_MS) {
+            const targetRows = buildBalancedTargetRows(spec.rows, REPS_PER_COMBO);
+            for (let i = 0; i < REPS_PER_COMBO; i++) {
+                trialList.push({
+                    type: (d < 0) ? 'partial' : 'delayed',
+                    rows: spec.rows,
+                    cols: spec.cols,
+                    totalLetters: spec.total,
+                    rowLength: spec.rowLen,
+                    matrix: generateMatrix(spec.rows, spec.cols),
+                    targetRow: targetRows[i],
+                    delayMs: d
+                });
             }
         }
 
@@ -409,26 +444,27 @@
             if (!displayDiv) { resolve(); return; }
             
             // 根据条件决定音频播放时机
-            if (trial.type === 'partial') {
-                // 部分报告法：音频提前 100ms 播放（在矩阵出现前）
-                playCueByRow(trial.targetRow, trial.rows);
-                await new Promise(r => setTimeout(r, 100));  // 等待100ms
-                displayDiv.innerHTML = renderMatrixHTML(trial.matrix, trial.rows, trial.cols);
-                await new Promise(r => setTimeout(r, 50));
-                displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
-                setTimeout(() => showInputScreen(trial, resolve), 200);
-            } 
-            else if (trial.type === 'delayed') {
-                // 延迟报告法：先显示矩阵，再延迟，再播放音频
-                displayDiv.innerHTML = renderMatrixHTML(trial.matrix, trial.rows, trial.cols);
-                await new Promise(r => setTimeout(r, 50));
-                displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
-                setTimeout(() => {
+            if (trial.type === 'partial' || trial.type === 'delayed') {
+                const delayMs = Number(trial.delayMs ?? 0);
+                if (delayMs < 0) {
+                    // 线索提前：先播音，再等待 |delay|ms，再呈现矩阵
                     playCueByRow(trial.targetRow, trial.rows);
+                    await new Promise(r => setTimeout(r, Math.abs(delayMs)));
+                    displayDiv.innerHTML = renderMatrixHTML(trial.matrix, trial.rows, trial.cols);
+                    await new Promise(r => setTimeout(r, 50));
+                    displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
                     setTimeout(() => showInputScreen(trial, resolve), 200);
-                }, trial.delayMs);
-            }
-            else { // whole
+                } else {
+                    // 线索延迟（含 0ms）：先呈现矩阵，再等待 delayMs，再播音
+                    displayDiv.innerHTML = renderMatrixHTML(trial.matrix, trial.rows, trial.cols);
+                    await new Promise(r => setTimeout(r, 50));
+                    displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
+                    setTimeout(() => {
+                        playCueByRow(trial.targetRow, trial.rows);
+                        setTimeout(() => showInputScreen(trial, resolve), 200);
+                    }, delayMs);
+                }
+            } else { // whole
                 displayDiv.innerHTML = renderMatrixHTML(trial.matrix, trial.rows, trial.cols);
                 await new Promise(r => setTimeout(r, 50));
                 displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
@@ -490,10 +526,8 @@
             let delayValue;
             if (trial.type === 'whole') {
                 delayValue = 65537;
-            } else if (trial.type === 'partial') {
-                delayValue = -0.1;
             } else {
-                delayValue = trial.delayMs / 1000;
+                delayValue = Number(trial.delayMs ?? 0) / 1000;
             }
 
             experimentData.push({

@@ -5,10 +5,69 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>实验数据分析</title>
     <script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+    <style>
+        body {
+            font-family: "Segoe UI", Arial, sans-serif;
+            margin: 16px;
+            color: #111;
+        }
+        .status {
+            padding: 12px 14px;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            margin-bottom: 14px;
+            background: #fafafa;
+        }
+        .status .small {
+            color: #555;
+            font-size: 13px;
+        }
+        .subject {
+            border: 1px solid #e5e5e5;
+            border-radius: 12px;
+            padding: 12px 12px 16px;
+            margin: 14px 0;
+        }
+        .subject-title {
+            font-size: 18px;
+            font-weight: 700;
+            margin: 0 0 10px 0;
+        }
+        .charts {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            align-items: start;
+        }
+        .chart-card {
+            border: 1px solid #eee;
+            border-radius: 10px;
+            padding: 10px;
+        }
+        .chart-title {
+            margin: 0 0 6px 0;
+            font-size: 14px;
+            font-weight: 700;
+            color: #333;
+        }
+        @media (max-width: 900px) {
+            .charts { grid-template-columns: 1fr; }
+        }
+    </style>
 </head>
 <body>
-    <div id="immediateandpartial"></div>
-    <div id="decay"></div>
+    <div id="status" class="status">
+        <div><strong>数据可视化</strong></div>
+        <div class="small" id="status-text">正在查找同级目录下的 CSV 文件并加载……</div>
+        <div class="small" style="margin-top:8px;">
+            <label>
+                <input id="csv-picker" type="file" accept=".csv" multiple style="display:none;">
+                <button id="csv-picker-btn" type="button">手动选择 CSV（备用）</button>
+            </label>
+        </div>
+    </div>
+
+    <div id="subjects"></div>
 
     <script src="data_visualization.js"></script>
 </body>
