@@ -1,13 +1,30 @@
-//常量区
+// ======================
+// 1. 全局配置
+// ======================
 const margin = { top: 20, right: 100, bottom: 30, left: 40 };
 const plotWidth = 300;
 const plotHeight = 300;
 const gap = 50;
 const totalWidth = plotWidth * 2 + gap + margin.left + margin.right;
 const totalHeight = plotHeight * 2 + gap + margin.top + margin.bottom;
-// 衰变图：独立高度（2x2网格，不与其他图重叠）
 const decayTotalHeight = totalHeight; 
+// 样式配置
+const STYLE = {
+  pointR: 3,
+  pointRHover: 6,
+  lineW: 2,
+  colorIm: "steelblue",
+  colorPa: "red",
+  colorDecay: "red",
+  colorStandard: "#ff7f0e",
+  fontAxis: "12px",
+  fontTitle: "20px",
+  titleColor: "#6f00ff"
+}
 
+// ======================
+// 2. 工具函数
+// ======================
 //辅助函数：计算实验1和实验3的单个被试平均值 + 全局平均值
 function getAverageImPa(data) {
     // 获取当前数据集统一的delay值（raw_data_im/pa都是单一delay）
@@ -68,8 +85,11 @@ function safeNum(n){
     return +n;
 }
 
+// ======================
+// 3. 主程序：绘图
+// ======================
 //解析csv，字符串转数字
-d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
+d3.csv("C_data.csv").then(data => {
     // 字符串转数字
     data.forEach(d => {
         d.input = safeNum(d.input);
@@ -78,22 +98,16 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
     });
 
     //实验1、实验3的数据和实验4的数据分开
-    const raw_data_im = d3.filter(data, (item) => {
-        return item.delay == 65537
-    });
-    const raw_data_pa = d3.filter(data, (item) => {
-        return item.delay == 0
-    });
-    const raw_data_de = d3.filter(data, (item) => {
-        return item.delay != 65537 && item.input == 9
-    });
+    const raw_data_im = d3.filter(data, (item) => item.delay == 65537);
+    const raw_data_pa = d3.filter(data, (item) => item.delay == 0);
+    const raw_data_de = d3.filter(data, (item) => item.delay != 65537 && item.input == 9);
     //得到每个被试的平均值和所有人的平均值数据集
     const data_im = getAverageImPa(raw_data_im);
     const data_pa = getAverageImPa(raw_data_pa);
     const data_de = getAverageDe(raw_data_de);
 
 
-    //这里是全部报告法与部分报告法的图表区
+    //这里是全部报告法与部分报告法的画布
     const svg1 = d3.select("#immediateandpartial")
         .append('svg')
         .attr('width', totalWidth)
@@ -104,7 +118,7 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
         .attr('height', decayTotalHeight)
         .style("border", "1px solid #000"); // 新增
 
-    //画单个图表的函数
+    //画单个全部&部分报告法图表的函数
     function drawEachImPa(container, name, data, x, y){
         const im_data = d3.group(data, d => d.delay).get(65537);
         const pa_data = d3.group(data, d => d.delay).get(0);
@@ -120,7 +134,6 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
         const xScale = d3.scaleLinear()
             .domain([0, 12])
             .range([0, plotWidth])
-        // Y轴保持原有逻辑不变
         const yScale = d3.scaleLinear()
             .domain([0, 12])
             .range([plotHeight, 0]);
@@ -130,11 +143,11 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
             .x(d => xScale(d))
             .y(d => yScale(d));
         const standardPoints = [0, 12];
-        g.append('path')//实例化
+        g.append('path')
             .attr('d', standardLine(standardPoints))
             .attr('fill', 'none')
-            .attr('stroke', '#ff7f0e')
-            .attr('stroke-width', 2)
+            .attr('stroke', STYLE.colorStandard)
+            .attr('stroke-width', STYLE.lineW)
             .attr('stroke-dasharray', '4 2');
 
         //全部报告法实验数据的线
@@ -142,11 +155,11 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
             .x(d => xScale(d.input))
             .y(d => yScale(d.output))
             .defined(d => !isNaN(d.output));
-        g.append('path')//实例化
+        g.append('path')
             .attr('d', im_line(im_data))
             .attr('fill', 'none')
-            .attr('stroke', 'steelblue')
-            .attr('stroke-width', 2);
+            .attr('stroke', STYLE.colorIm)
+            .attr('stroke-width', STYLE.lineW);
         //实验数据的点
         g.selectAll('.circle-im')
             .data(im_data)
@@ -155,22 +168,19 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
             .attr('class', 'circle-im')
             .attr('cx', d => xScale(d.input))
             .attr('cy', d => yScale(d.output))
-            .attr('r', 3)
-            .attr('fill', 'steelblue')
-            .attr('title', d => `input:${d.input} output:${d.output}`)
-            //鼠标悬浮显示具体数值
+            .attr('r', STYLE.pointR)
+            .attr('fill', STYLE.colorIm)
             .on('mouseover', function(e, d) {
-                d3.select(this).attr('r', 6);
-                // 文字显示在点正下方
+                d3.select(this).attr('r', STYLE.pointRHover);
                 g.append('text')
                     .attr('class', 'tip')
-                    .attr('text-anchor', 'middle')  // 水平居中
+                    .attr('text-anchor', 'middle')
                     .attr('x', xScale(d.input))
-                    .attr('y', yScale(d.output) + 15) // 向下偏移
+                    .attr('y', yScale(d.output) + 15)
                     .text(`input: ${d.input}, output: ${d.output.toFixed(2)}`);
             })
             .on('mouseout', function() {
-                d3.select(this).attr('r', 3);
+                d3.select(this).attr('r', STYLE.pointR);
                 d3.selectAll('.tip').remove();
             });
 
@@ -179,11 +189,11 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
             .x(d => xScale(d.input))
             .y(d => yScale(d.output))
             .defined(d => !isNaN(d.output));
-        g.append('path')//实例化
+        g.append('path')
             .attr('d', pa_line(pa_data))
             .attr('fill', 'none')
-            .attr('stroke', 'red')
-            .attr('stroke-width', 2);
+            .attr('stroke', STYLE.colorPa)
+            .attr('stroke-width', STYLE.lineW);
         //实验数据的点
         g.selectAll('.circle-pa')
             .data(pa_data)
@@ -192,21 +202,19 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
             .attr('class', 'circle-pa')
             .attr('cx', d => xScale(d.input))
             .attr('cy', d => yScale(d.output))
-            .attr('r', 3)
-            .attr('fill', 'red')
-            //鼠标悬浮显示具体数值
+            .attr('r', STYLE.pointR)
+            .attr('fill', STYLE.colorPa)
             .on('mouseover', function(e, d) {
-                d3.select(this).attr('r', 6);
-                // 文字显示在点正下方
+                d3.select(this).attr('r', STYLE.pointRHover);
                 g.append('text')
                     .attr('class', 'tip')
-                    .attr('text-anchor', 'middle')  // 水平居中
+                    .attr('text-anchor', 'middle')
                     .attr('x', xScale(d.input))
-                    .attr('y', yScale(d.output) + 15) // 向下偏移
+                    .attr('y', yScale(d.output) + 15)
                     .text(`input: ${d.input}, output: ${d.output.toFixed(2)}`);
             })
             .on('mouseout', function() {
-                d3.select(this).attr('r', 3);
+                d3.select(this).attr('r', STYLE.pointR);
                 d3.selectAll('.tip').remove();
             });
         
@@ -215,25 +223,25 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
         g.append('g')
             .attr('transform', `translate(0, ${plotHeight})`)
             .call(d3.axisBottom(xScale).tickValues(xTickValues))
-            .style('font-size', '12px');
+            .style('font-size', STYLE.fontAxis);
         g.append('g')
             .call(d3.axisLeft(yScale).ticks(6))
-            .style('font-size', '12px');
+            .style('font-size', STYLE.fontAxis);
 
         //图例区（Ss的名字）
         g.append('text')
             .attr('x', plotWidth - 150)
             .attr('y', 40)
             .attr('text-anchor', 'end')
-            .style('font-size', '20px')
-            .style('fill', '#6f00ff')
+            .style('font-size', STYLE.fontTitle)
+            .style('fill', STYLE.titleColor)
             .text(name);
     }
 
     function drawEachDecay(container, name, de_data, im_data, x, y){
         if (!de_data || de_data.length === 0) {
-        console.warn(`衰变图【${name}】无数据`);
-        return;
+            console.warn(`衰变图【${name}】无数据`);
+            return;
         }
         //只要3x3矩阵的
         im_data = im_data?.filter(item => item.input == 9) || [];
@@ -256,18 +264,20 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
         g.append('line')
             .attr('x1', xScale(0)).attr('x2', xScale(0))
             .attr('y1', yScaleLeft(0)).attr('y2', yScaleLeft(9))
-            .attr('stroke','#ff7f0e').attr('stroke-width',2).attr('stroke-dasharray','4 2');
+            .attr('stroke',STYLE.colorStandard)
+            .attr('stroke-width',STYLE.lineW)
+            .attr('stroke-dasharray','4 2');
 
         //实验数据的线
         const line = d3.line()
             .x(d => xScale(d.delay))
             .y(d => yScaleLeft(d.output))
-            .defined(d => !isNaN(d.output));;
-        g.append('path')//实例化
+            .defined(d => !isNaN(d.output));
+        g.append('path')
             .attr('d', line(de_data))
             .attr('fill', 'none')
-            .attr('stroke', 'red')
-            .attr('stroke-width', 2);
+            .attr('stroke', STYLE.colorDecay)
+            .attr('stroke-width', STYLE.lineW);
         //实验数据的点
         g.selectAll('.circle')
             .data(de_data)
@@ -276,21 +286,19 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
             .attr('class', 'circle')
             .attr('cx', d => xScale(d.delay))
             .attr('cy', d => yScaleLeft(d.output))
-            .attr('r', 3)
-            .attr('fill', 'red')
-            //鼠标悬浮显示具体数值
+            .attr('r', STYLE.pointR)
+            .attr('fill', STYLE.colorDecay)
             .on('mouseover', function(e, d) {
-                d3.select(this).attr('r', 6);
-                // 文字显示在点正下方
+                d3.select(this).attr('r', STYLE.pointRHover);
                 g.append('text')
                     .attr('class', 'tip')
-                    .attr('text-anchor', 'middle')  // 水平居中
+                    .attr('text-anchor', 'middle')
                     .attr('x', xScale(d.delay))
-                    .attr('y', yScaleLeft(d.output) + 15) // 向下偏移
+                    .attr('y', yScaleLeft(d.output) + 15)
                     .text(`delay: ${d.delay}, output: ${d.output.toFixed(2)}`);
             })
             .on('mouseout', function() {
-                d3.select(this).attr('r', 3);
+                d3.select(this).attr('r', STYLE.pointR);
                 d3.selectAll('.tip').remove();
             });
         
@@ -301,14 +309,14 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
         g.append('g')
             .attr('transform', `translate(0, ${plotHeight})`)
             .call(d3.axisBottom(xScale).tickValues(xTickValues))
-            .style('font-size', '12px');
+            .style('font-size', STYLE.fontAxis);
         g.append('g')
             .call(d3.axisLeft(yScaleLeft).tickValues(yTickValuesLeft))
-            .style('font-size', '12px');
+            .style('font-size', STYLE.fontAxis);
         g.append('g')
             .attr('transform', `translate(${plotWidth}, 0)`) 
             .call(d3.axisRight(yScaleRight).tickValues(yTickValuesRight))
-            .style('font-size', '12px');
+            .style('font-size', STYLE.fontAxis);
 
         //添加左右柱子（右代表全部报告法在3x3下能报告出的平均值）
         g.append('rect')
@@ -343,13 +351,14 @@ d3.csv("Sperling_C_COMPLETE_1776420697807.csv").then(data => {
                 d3.select(this).style('opacity', 1);
                 d3.selectAll('.tip').remove();
             });
+
         //图例区（Ss的名字）
         g.append('text')
             .attr('x', plotWidth - 150)
             .attr('y', 40)
             .attr('text-anchor', 'end')
-            .style('font-size', '20px')
-            .style('fill', '#6f00ff')
+            .style('font-size', STYLE.fontTitle)
+            .style('fill', STYLE.titleColor)
             .text(name);
     }
 
