@@ -1,13 +1,30 @@
 // ======================
 // 1. 全局配置
 // ======================
-const margin = { top: 20, right: 100, bottom: 30, left: 40 };
-const plotWidth = 300;
-const plotHeight = 300;
-const gap = 50;
-const totalWidth = plotWidth * 2 + gap + margin.left + margin.right;
-const totalHeight = plotHeight * 2 + gap + margin.top + margin.bottom;
-const decayTotalHeight = totalHeight; 
+const TARGET_PLOT_SIZE = 310;        // 图的大小
+const margin = { top: 20, right: 25, bottom: 20, left: 25 };
+
+// 分开控制：水平间距大一点，垂直间距小一点
+const gapH = 150;    // 水平间距（列之间）
+const gapV = 55;    // 垂直间距（行之间） 👈 调小这里
+
+// 画布宽度：几乎贴边
+const totalWidth = Math.min(window.innerWidth - 30, window.innerWidth * 0.98);
+
+// 网格尺寸：用 gapH 计算宽度，用 gapV 计算高度
+const gridWidth = TARGET_PLOT_SIZE * 3 + gapH * 2;
+const gridHeight = TARGET_PLOT_SIZE * 2 + gapV;    // 只有 1 个行间隙
+
+// 画布高度自适应
+const totalHeight = Math.max(window.innerHeight * 0.9, margin.top + margin.bottom + gridHeight);
+const decayTotalHeight = totalHeight;
+
+// 水平居中偏移（基于 gapH 计算的网格宽度）
+const offsetX = (totalWidth - gridWidth) / 2;
+const offsetY = margin.top;
+
+const plotSize = TARGET_PLOT_SIZE;
+
 // 样式配置
 const STYLE = {
   pointR: 3,
@@ -89,7 +106,7 @@ function safeNum(n){
 // 3. 主程序：绘图
 // ======================
 //解析csv，字符串转数字
-d3.csv("C_data.csv").then(data => {
+d3.csv("real_data.csv").then(data => {
     // 字符串转数字
     data.forEach(d => {
         d.input = safeNum(d.input);
@@ -133,10 +150,10 @@ d3.csv("C_data.csv").then(data => {
         //x轴y轴
         const xScale = d3.scaleLinear()
             .domain([0, 12])
-            .range([0, plotWidth])
+            .range([0, plotSize])
         const yScale = d3.scaleLinear()
             .domain([0, 12])
-            .range([plotHeight, 0]);
+            .range([plotSize, 0]);
 
         //按照论文，添加了y=x的标准线
         const standardLine = d3.line()
@@ -221,7 +238,7 @@ d3.csv("C_data.csv").then(data => {
         //我们实验只会出现这几个值
         const xTickValues = [6, 8, 9, 12];
         g.append('g')
-            .attr('transform', `translate(0, ${plotHeight})`)
+            .attr('transform', `translate(0, ${plotSize})`)
             .call(d3.axisBottom(xScale).tickValues(xTickValues))
             .style('font-size', STYLE.fontAxis);
         g.append('g')
@@ -230,7 +247,7 @@ d3.csv("C_data.csv").then(data => {
 
         //图例区（Ss的名字）
         g.append('text')
-            .attr('x', plotWidth - 150)
+            .attr('x', plotSize - 150)
             .attr('y', 40)
             .attr('text-anchor', 'end')
             .style('font-size', STYLE.fontTitle)
@@ -252,13 +269,13 @@ d3.csv("C_data.csv").then(data => {
         //x轴y轴 论文里图有两条y轴，左边是正确数目右边是正确率
         const xScale = d3.scaleLinear()
             .domain([-0.15, 1.25])//稍微大一点留点空隙
-            .range([0, plotWidth])
+            .range([0, plotSize])
         const yScaleLeft = d3.scaleLinear()
             .domain([0, 9])
-            .range([plotHeight, 0])
+            .range([plotSize, 0])
         const yScaleRight = d3.scaleLinear()
             .domain([0, 100])
-            .range([plotHeight, 0])
+            .range([plotSize, 0])
 
         //按照论文，添加了x=0的标准线
         g.append('line')
@@ -307,14 +324,14 @@ d3.csv("C_data.csv").then(data => {
         const yTickValuesLeft = [2, 4, 6, 8, 9];
         const yTickValuesRight = [0, 25, 50, 75, 100];
         g.append('g')
-            .attr('transform', `translate(0, ${plotHeight})`)
+            .attr('transform', `translate(0, ${plotSize})`)
             .call(d3.axisBottom(xScale).tickValues(xTickValues))
             .style('font-size', STYLE.fontAxis);
         g.append('g')
             .call(d3.axisLeft(yScaleLeft).tickValues(yTickValuesLeft))
             .style('font-size', STYLE.fontAxis);
         g.append('g')
-            .attr('transform', `translate(${plotWidth}, 0)`) 
+            .attr('transform', `translate(${plotSize}, 0)`) 
             .call(d3.axisRight(yScaleRight).tickValues(yTickValuesRight))
             .style('font-size', STYLE.fontAxis);
 
@@ -323,7 +340,7 @@ d3.csv("C_data.csv").then(data => {
             .attr('x', xScale(-0.05))
             .attr('width', xScale(0) - xScale(-0.05))
             .attr('y', yScaleLeft(1))
-            .attr('height', plotHeight - yScaleLeft(1))
+            .attr('height', plotSize - yScaleLeft(1))
             .attr('fill', '#000')
         const imValue = (im_data.length > 0 && !isNaN(im_data[0].output)) ? im_data[0].output : 0;
         const imValuePercentage = (imValue / 9) * 100
@@ -331,7 +348,7 @@ d3.csv("C_data.csv").then(data => {
             .attr('x', xScale(1.18))
             .attr('width', xScale(1.23) - xScale(1.18))
             .attr('y', yScaleLeft(imValue))
-            .attr('height', plotHeight - yScaleLeft(imValue))
+            .attr('height', plotSize - yScaleLeft(imValue))
             .attr('fill', '#000')
             .on('mouseover', function(e){
                 d3.select(this).style('opacity', 0.7);
@@ -354,7 +371,7 @@ d3.csv("C_data.csv").then(data => {
 
         //图例区（Ss的名字）
         g.append('text')
-            .attr('x', plotWidth - 150)
+            .attr('x', plotSize - 150)
             .attr('y', 40)
             .attr('text-anchor', 'end')
             .style('font-size', STYLE.fontTitle)
@@ -362,22 +379,49 @@ d3.csv("C_data.csv").then(data => {
             .text(name);
     }
 
-    //实验1，3的绘图部分
+        //实验1，3的绘图部分
     const mergedData = [...data_im, ...data_pa];
     const grouped_data = d3.group(mergedData, d => d.name);
 
-    drawEachImPa(svg1, 'Average', grouped_data.get('average'), margin.left, margin.top);
-    drawEachImPa(svg1, 'C', grouped_data.get('C'), margin.left + plotWidth + gap, margin.top);
-    //drawEachImPa(svg1, 'L', grouped_data.get('L'), margin.left, margin.top + plotHeight + gap);
-    //drawEachImPa(svg1, 'W', grouped_data.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
+    // 左侧 Average 图（跨两行垂直居中）
+    drawEachImPa(svg1, 'Average', grouped_data.get('average'),
+      offsetX + 0 * (plotSize + gapH),
+      offsetY + (gridHeight - plotSize) / 2
+    );
 
-    //绘图部分 - 实验4（衰变图）✅ 修复4：正确传递对应被试的im数据 + 修正Y坐标
+    // 右侧第一行
+    drawEachImPa(svg1, 'C', grouped_data.get('C'),
+      offsetX + 1 * (plotSize + gapH), offsetY);
+    drawEachImPa(svg1, 'L', grouped_data.get('L'),
+      offsetX + 2 * (plotSize + gapH), offsetY);
+
+    // 右侧第二行（垂直偏移 = 上一行高度 + 垂直间距）
+    drawEachImPa(svg1, 'W', grouped_data.get('W'),
+      offsetX + 1 * (plotSize + gapH), offsetY + plotSize + gapV);
+    //drawEachImPa(svg1, 'Z', grouped_data.get('Z'),
+      //offsetX + 2 * (plotSize + gapH), offsetY + plotSize + gapV);
+
+    // ======================
+    // 实验4衰变图：完全一样的全屏排版
+    // ======================
     const grouped_de = d3.group(data_de, d => d.name);
-    const grouped_im = d3.group(data_im, d => d.name); // 按被试分组实验1数据
+    const grouped_im = d3.group(data_im, d => d.name);
 
-    // ✅ 修复5：衰变图从顶部开始画（不超出SVG），标准2x2布局
-    //drawEachDecay(svg2, 'Average', grouped_de.get('average'), grouped_im.get('average'), margin.left, margin.top);
-    drawEachDecay(svg2, 'C', grouped_de.get('C'), grouped_im.get('C'), margin.left + plotWidth + gap, margin.top);
-    //drawEachDecay(svg2, 'L', grouped_de.get('L'), grouped_im.get('L'), margin.left, margin.top + plotHeight + gap);
-    //drawEachDecay(svg2, 'W', grouped_de.get('W'), grouped_im.get('W'), margin.left + plotWidth + gap, margin.top + plotHeight + gap);
+    // Average 图（左侧垂直居中）
+    drawEachDecay(svg2, 'Average', grouped_de.get('average'), grouped_im.get('average'),
+      offsetX + 0 * (plotSize + gapH),
+      offsetY + (gridHeight - plotSize) / 2
+    );
+
+    // 右侧第一行
+    drawEachDecay(svg2, 'C', grouped_de.get('C'), grouped_im.get('C'),
+      offsetX + 1 * (plotSize + gapH), offsetY);
+    drawEachDecay(svg2, 'L', grouped_de.get('L'), grouped_im.get('L'),
+      offsetX + 2 * (plotSize + gapH), offsetY);
+
+    // 右侧第二行
+    drawEachDecay(svg2, 'W', grouped_de.get('W'), grouped_im.get('W'),
+      offsetX + 1 * (plotSize + gapH), offsetY + plotSize + gapV);
+    drawEachDecay(svg2, 'Z', grouped_de.get('Z'), grouped_im.get('Z'),
+      offsetX + 2 * (plotSize + gapH), offsetY + plotSize + gapV);
 });
