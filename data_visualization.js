@@ -1,8 +1,8 @@
 // ======================
 // 1. 全局配置
 // ======================
-const TARGET_PLOT_SIZE = 310;        // 图的大小
-const margin = { top: 20, right: 25, bottom: 20, left: 25 };
+const TARGET_PLOT_SIZE = 300;        // 图的大小
+const margin = { top: 20, right: 25, bottom: 40, left: 25 };
 
 // 分开控制：水平间距大一点，垂直间距小一点
 const gapH = 150;    // 水平间距（列之间）
@@ -35,8 +35,8 @@ const STYLE = {
   colorDecay: "red",
   colorStandard: "#4d4a47",
   fontAxis: "12px",
-  fontTitle: "20px",
-  titleColor: "#d900ff",
+  fontTitle: "30px",
+  titleColor: "#414141",
   axisLineWidth: 2
 }
 
@@ -134,7 +134,6 @@ d3.csv("real_data.csv").then(data => {
         .append('svg')
         .attr('width', totalWidth)
         .attr('height', decayTotalHeight)
-        .style("border", "1px solid #000"); // 新增
 
     //画单个全部&部分报告法图表的函数
     function drawEachImPa(container, name, data, x, y){
@@ -242,20 +241,70 @@ d3.csv("real_data.csv").then(data => {
             .attr('transform', `translate(0, ${plotSize})`)
             .call(d3.axisBottom(xScale).tickValues(xTickValues))
             .style('font-size', STYLE.fontAxis)
-            .style('stroke-width', STYLE.axisLineWidth);;
+            .style('stroke-width', STYLE.axisLineWidth);
         g.append('g')
             .call(d3.axisLeft(yScale).ticks(6))
             .style('font-size', STYLE.fontAxis)
-            .style('stroke-width', STYLE.axisLineWidth);;
+            .style('stroke-width', STYLE.axisLineWidth);
 
-        //图例区（Ss的名字）
+        // X轴标签
         g.append('text')
-            .attr('x', plotSize - 150)
-            .attr('y', 40)
+            .attr('x', plotSize / 2)
+            .attr('y', plotSize + 30)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '14px')
+            .style('fill', '#333')
+            .text('呈现字母个数');
+        // Y轴标签
+        g.append('text')
+            .attr('x', -plotSize / 2)
+            .attr('y', -20)
+            .attr('text-anchor', 'middle')
+            .attr('transform', 'rotate(-90)')
+            .style('font-size', '14px')
+            .style('fill', '#333')
+            .text('正确回忆数目');
+
+        //图例区
+        g.append('text')
+            .attr('x', plotSize - 200)
+            .attr('y', 60)
             .attr('text-anchor', 'end')
             .style('font-size', STYLE.fontTitle)
             .style('fill', STYLE.titleColor)
             .text(name);
+        // 蓝色短线：全部报告法
+        g.append('line')
+            .attr('x1', plotSize - 250)
+            .attr('x2', plotSize - 220)
+            .attr('y1', 80)
+            .attr('y2', 80)
+            .attr('stroke', STYLE.colorIm)
+            .attr('stroke-width', STYLE.lineW);
+        // 蓝色文字
+        g.append('text')
+            .attr('x', plotSize - 210)
+            .attr('y', 84)
+            .attr('text-anchor', 'start')
+            .style('font-size', '12px')
+            .style('fill', '#333')
+            .text('全部报告法');
+        // 红色短线：部分报告法
+        g.append('line')
+            .attr('x1', plotSize - 250)
+            .attr('x2', plotSize - 220)
+            .attr('y1', 100)
+            .attr('y2', 100)
+            .attr('stroke', STYLE.colorPa)
+            .attr('stroke-width', STYLE.lineW);
+        // 红色文字
+        g.append('text')
+            .attr('x', plotSize - 210)
+            .attr('y', 104)
+            .attr('text-anchor', 'start')
+            .style('font-size', '12px')
+            .style('fill', '#333')
+            .text('部分报告法');
     }
 
     function drawEachDecay(container, name, de_data, im_data, x, y){
@@ -341,6 +390,34 @@ d3.csv("real_data.csv").then(data => {
             .style('font-size', STYLE.fontAxis)
             .style('stroke-width', STYLE.axisLineWidth);
 
+        // X轴标签：延迟时间（秒）
+        g.append('text')
+            .attr('x', plotSize / 2)
+            .attr('y', plotSize + 30)
+            .attr('text-anchor', 'middle')
+            .style('font-size', '14px')
+            .style('fill', '#333')
+            .text('延迟时间（s）');
+        // 左Y轴标签：正确回忆数目
+        g.append('text')
+            .attr('x', -plotSize / 2)
+            .attr('y', -20)
+            .attr('text-anchor', 'middle')
+            .attr('transform', 'rotate(-90)')
+            .style('font-size', '14px')
+            .style('fill', '#333')
+            .text('正确回忆数目');
+        // 右Y轴标签：正确率(%)
+        g.append('text')
+            .attr('x', plotSize + 20)
+            .attr('y', plotSize / 2 - 6)
+            .attr('text-anchor', 'middle')
+            .attr('transform', `rotate(90 ${plotSize + 20} ${plotSize / 2})`)
+            .style('font-size', '14px')
+            .style('fill', '#333')
+            .text('准确率（%）');
+
+
         //添加左右柱子（右代表全部报告法在3x3下能报告出的平均值）
         g.append('rect')
             .attr('x', xScale(-0.05))
@@ -377,8 +454,8 @@ d3.csv("real_data.csv").then(data => {
 
         //图例区（Ss的名字）
         g.append('text')
-            .attr('x', plotSize - 150)
-            .attr('y', 40)
+            .attr('x', plotSize - 50)
+            .attr('y', 50)
             .attr('text-anchor', 'end')
             .style('font-size', STYLE.fontTitle)
             .style('fill', STYLE.titleColor)
@@ -389,7 +466,7 @@ d3.csv("real_data.csv").then(data => {
     const mergedData = [...data_im, ...data_pa];
     const grouped_data = d3.group(mergedData, d => d.name);
 
-    drawEachImPa(svg1, 'Average', grouped_data.get('average'),
+    drawEachImPa(svg1, 'AVG', grouped_data.get('average'),
       offsetX + 0 * (plotSize + gapH),
       offsetY + (gridHeight - plotSize) / 2
     );
@@ -399,13 +476,13 @@ d3.csv("real_data.csv").then(data => {
       offsetX + 2 * (plotSize + gapH), offsetY);
     //drawEachImPa(svg1, 'W', grouped_data.get('W'),
       //offsetX + 1 * (plotSize + gapH), offsetY + plotSize + gapV);
-    //drawEachImPa(svg1, 'Z', grouped_data.get('Z'),
-      //offsetX + 2 * (plotSize + gapH), offsetY + plotSize + gapV);
+    drawEachImPa(svg1, 'Z', grouped_data.get('Z'),
+      offsetX + 2 * (plotSize + gapH), offsetY + plotSize + gapV);
 
     const grouped_de = d3.group(data_de, d => d.name);
     const grouped_im = d3.group(data_im, d => d.name);
 
-    drawEachDecay(svg2, 'Average', grouped_de.get('average'), grouped_im.get('average'),
+    drawEachDecay(svg2, 'AVG', grouped_de.get('average'), grouped_im.get('average'),
       offsetX + 0 * (plotSize + gapH),
       offsetY + (gridHeight - plotSize) / 2
     );
