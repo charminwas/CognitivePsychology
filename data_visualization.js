@@ -33,10 +33,11 @@ const STYLE = {
   colorIm: "steelblue",
   colorPa: "red",
   colorDecay: "red",
-  colorStandard: "#ff7f0e",
+  colorStandard: "#4d4a47",
   fontAxis: "12px",
   fontTitle: "20px",
-  titleColor: "#6f00ff"
+  titleColor: "#d900ff",
+  axisLineWidth: 2
 }
 
 // ======================
@@ -240,10 +241,12 @@ d3.csv("real_data.csv").then(data => {
         g.append('g')
             .attr('transform', `translate(0, ${plotSize})`)
             .call(d3.axisBottom(xScale).tickValues(xTickValues))
-            .style('font-size', STYLE.fontAxis);
+            .style('font-size', STYLE.fontAxis)
+            .style('stroke-width', STYLE.axisLineWidth);;
         g.append('g')
             .call(d3.axisLeft(yScale).ticks(6))
-            .style('font-size', STYLE.fontAxis);
+            .style('font-size', STYLE.fontAxis)
+            .style('stroke-width', STYLE.axisLineWidth);;
 
         //图例区（Ss的名字）
         g.append('text')
@@ -326,14 +329,17 @@ d3.csv("real_data.csv").then(data => {
         g.append('g')
             .attr('transform', `translate(0, ${plotSize})`)
             .call(d3.axisBottom(xScale).tickValues(xTickValues))
-            .style('font-size', STYLE.fontAxis);
+            .style('font-size', STYLE.fontAxis)
+            .style('stroke-width', STYLE.axisLineWidth);
         g.append('g')
             .call(d3.axisLeft(yScaleLeft).tickValues(yTickValuesLeft))
-            .style('font-size', STYLE.fontAxis);
+            .style('font-size', STYLE.fontAxis)
+            .style('stroke-width', STYLE.axisLineWidth);
         g.append('g')
             .attr('transform', `translate(${plotSize}, 0)`) 
             .call(d3.axisRight(yScaleRight).tickValues(yTickValuesRight))
-            .style('font-size', STYLE.fontAxis);
+            .style('font-size', STYLE.fontAxis)
+            .style('stroke-width', STYLE.axisLineWidth);
 
         //添加左右柱子（右代表全部报告法在3x3下能报告出的平均值）
         g.append('rect')
@@ -379,47 +385,34 @@ d3.csv("real_data.csv").then(data => {
             .text(name);
     }
 
-        //实验1，3的绘图部分
+    //实验1，3的绘图部分
     const mergedData = [...data_im, ...data_pa];
     const grouped_data = d3.group(mergedData, d => d.name);
 
-    // 左侧 Average 图（跨两行垂直居中）
     drawEachImPa(svg1, 'Average', grouped_data.get('average'),
       offsetX + 0 * (plotSize + gapH),
       offsetY + (gridHeight - plotSize) / 2
     );
-
-    // 右侧第一行
     drawEachImPa(svg1, 'C', grouped_data.get('C'),
       offsetX + 1 * (plotSize + gapH), offsetY);
     drawEachImPa(svg1, 'L', grouped_data.get('L'),
       offsetX + 2 * (plotSize + gapH), offsetY);
-
-    // 右侧第二行（垂直偏移 = 上一行高度 + 垂直间距）
-    drawEachImPa(svg1, 'W', grouped_data.get('W'),
-      offsetX + 1 * (plotSize + gapH), offsetY + plotSize + gapV);
+    //drawEachImPa(svg1, 'W', grouped_data.get('W'),
+      //offsetX + 1 * (plotSize + gapH), offsetY + plotSize + gapV);
     //drawEachImPa(svg1, 'Z', grouped_data.get('Z'),
       //offsetX + 2 * (plotSize + gapH), offsetY + plotSize + gapV);
 
-    // ======================
-    // 实验4衰变图：完全一样的全屏排版
-    // ======================
     const grouped_de = d3.group(data_de, d => d.name);
     const grouped_im = d3.group(data_im, d => d.name);
 
-    // Average 图（左侧垂直居中）
     drawEachDecay(svg2, 'Average', grouped_de.get('average'), grouped_im.get('average'),
       offsetX + 0 * (plotSize + gapH),
       offsetY + (gridHeight - plotSize) / 2
     );
-
-    // 右侧第一行
     drawEachDecay(svg2, 'C', grouped_de.get('C'), grouped_im.get('C'),
       offsetX + 1 * (plotSize + gapH), offsetY);
     drawEachDecay(svg2, 'L', grouped_de.get('L'), grouped_im.get('L'),
       offsetX + 2 * (plotSize + gapH), offsetY);
-
-    // 右侧第二行
     drawEachDecay(svg2, 'W', grouped_de.get('W'), grouped_im.get('W'),
       offsetX + 1 * (plotSize + gapH), offsetY + plotSize + gapV);
     drawEachDecay(svg2, 'Z', grouped_de.get('Z'), grouped_im.get('Z'),
