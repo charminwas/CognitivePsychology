@@ -483,8 +483,8 @@ d3.csv("real_data.csv").then(data => {
       offsetX + 1 * (plotSize + gapH), offsetY);
     drawEachImPa(svg1, 'L', grouped_data.get('L'),
       offsetX + 2 * (plotSize + gapH), offsetY);
-    //drawEachImPa(svg1, 'W', grouped_data.get('W'),
-      //offsetX + 1 * (plotSize + gapH), offsetY + plotSize + gapV);
+    drawEachImPa(svg1, 'W', grouped_data.get('W'),
+      offsetX + 1 * (plotSize + gapH), offsetY + plotSize + gapV);
     drawEachImPa(svg1, 'Z', grouped_data.get('Z'),
       offsetX + 2 * (plotSize + gapH), offsetY + plotSize + gapV);
 
