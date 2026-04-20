@@ -103,12 +103,6 @@
         .grid-3col { grid-template-columns: repeat(3, 85px); }
         .grid-4col { grid-template-columns: repeat(4, 85px); }
         
-        .input-prompt {
-            color: #ddd;
-            font-size: 20px;
-            margin: 20px 0 15px;
-            font-family: 'Segoe UI', 'SF Pro', 'Inter', 'Arial', sans-serif;
-        }
         .progress-bar {
             position: fixed;
             top: 0;
@@ -166,11 +160,6 @@
             border-color: #ffaa66;
             box-shadow: 0 0 0 3px rgba(255,170,102,0.15);
         }
-        .hint-row {
-            margin-top: 10px;
-            font-size: 16px;
-            color: #999;
-        }
     </style>
 </head>
 <body>
@@ -185,7 +174,7 @@
 
     // 实验4：控制矩阵形状不变(3x3)，改变线索时延（单位ms）
     // -100ms 表示线索提前 100ms（对应 delay=-0.1s）
-    const EXP4_DELAYS_MS = [-100, 300, 500, 1000];
+    const EXP4_DELAYS_MS = [-100, 150, 300, 500, 1000];
     
     const MATRIX_TYPES = {
         '2x3': { rows: 2, cols: 3, total: 6, rowLen: 3 },
@@ -375,7 +364,7 @@
         for (const row of experimentData) {
             rows.push(`${row.name},${row.input},${row.output},${row.delay}`);
         }
-        const blob = new Blob([rows.join('\n')], { type: 'text/csv' });
+        const blob = new Blob([rows.join('\n')], { type: "text/csv" });
         const a = document.createElement('a');
         a.href = URL.createObjectURL(blob);
         const safeTag = String(tag).replace(/[^A-Za-z0-9_-]/g, "_");
@@ -428,7 +417,7 @@
         });
     }
     
-    function runSingleTrial(trial) {
+    async function runSingleTrial(trial) {
         return new Promise(async (resolve) => {
             container.innerHTML = `
                 <div class="stimulus-wrapper" style="width:100%;">
@@ -476,27 +465,19 @@
     function showInputScreen(trial, resolve) {
         const isWhole = (trial.type === 'whole');
         const expectedCount = isWhole ? trial.totalLetters : trial.rowLength;
-        const promptText = isWhole
-            ? `请按刚才呈现的矩阵格式输入 ${expectedCount} 个字母`
-            : `请输入 ${expectedCount} 个字母`;
-        const detailText = isWhole
-            ? `填满后按回车键提交`
-            : `请只输入被提示那一行的 ${expectedCount} 个字母，填满后按回车键提交`;
         
         const rows = isWhole ? trial.rows : 1;
         const cols = isWhole ? trial.cols : expectedCount;
         const gridTemplate = `grid-template-columns: repeat(${cols}, 70px);`;
-        const rowLabel = (!isWhole && trial.targetRow) ? `（第 ${trial.targetRow} 行）` : '';
         let cellsHtml = '';
         for (let i = 0; i < rows * cols; i++) {
             cellsHtml += `<input class="recall-cell" inputmode="latin" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="1" data-idx="${i}">`;
         }
 
+        // 完全移除所有文字提示，仅保留输入框
         container.innerHTML = `
             <div class="screen">
-                <div class="input-prompt">${promptText}${rowLabel}</div>
                 <div class="recall-grid" id="recall-grid" style="${gridTemplate}">${cellsHtml}</div>
-                <div class="hint-row" id="recall-hint">${detailText}</div>
             </div>
         `;
 
@@ -551,10 +532,6 @@
                 const v = normalizeChar(e.target.value);
                 e.target.value = v;
                 if (v) moveFocus(idx, 1);
-                const hintEl = document.getElementById('recall-hint');
-                if (hintEl) {
-                    hintEl.textContent = isComplete() ? '已填满：按回车键提交' : detailText;
-                }
             });
             el.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter') {
