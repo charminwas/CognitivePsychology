@@ -371,13 +371,22 @@ d3.csv("real_data.csv").then(data => {
                 d3.selectAll('.tip').remove();
             });
         
-        //补充各个轴的特征并实例化
-        const xTickValues = [-0.1, 0, 0.15, 0.3, 0.5, 1.0];
+        //补充各个轴的特征并渲染
+        const xTickValues = [-.10, 0, .15, .30, .50, 1.0];
         const yTickValuesLeft = [2, 4, 6, 8, 9];
         const yTickValuesRight = [0, 25, 50, 75, 100];
         g.append('g')
             .attr('transform', `translate(0, ${plotSize})`)
-            .call(d3.axisBottom(xScale).tickValues(xTickValues))
+            .call(
+                d3.axisBottom(xScale)
+                    .tickValues(xTickValues)
+                    .tickFormat( d => {
+                        if (d === 0) return '0';
+                        if (d === 1.0) return '1.0';
+                        if (d < 0) return d.toFixed(2).replace('-0.', '-.');
+                        return d.toFixed(2).replace('0.', '.');
+                    })
+            )
             .style('font-size', STYLE.fontAxis)
             .style('stroke-width', STYLE.axisLineWidth);
         g.append('g')
