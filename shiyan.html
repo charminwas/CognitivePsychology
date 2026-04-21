@@ -222,7 +222,7 @@
     let isRunning = false;
     let abortRequested = false;
 
-    let selectedMode = null; // 'whole' | 'partial' | 'delayed'
+    let selectedMode = null; // 'whole' | 'partial' | 'delayed' | 'hold'
 
     const container = document.getElementById('container');
 
@@ -318,6 +318,24 @@
     function generateTrialsForMode(mode) {
         const REPS_PER_COMBO = 20;
         let trialList = [];
+
+        if (mode === 'hold') {
+            // 新模式：矩阵持续显示，直到按空格（试次与全部报告法一致）
+            for (let key of MATRIX_KEYS) {
+                const spec = MATRIX_TYPES[key];
+                for (let i = 0; i < REPS_PER_COMBO; i++) {
+                    trialList.push({
+                        type: 'hold',
+                        rows: spec.rows,
+                        cols: spec.cols,
+                        totalLetters: spec.total,
+                        rowLength: spec.rowLen,
+                        matrix: generateMatrix(spec.rows, spec.cols)
+                    });
+                }
+            }
+            return shuffleArray(trialList);
+        }
 
         if (mode === 'whole') {
             // 实验1：全部报告法（2x3,2x4,3x3,3x4）
@@ -440,6 +458,24 @@
         });
     }
 
+    function waitForSpaceOrEscape() {
+        return new Promise((resolve) => {
+            const keyHandler = (e) => {
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    window.removeEventListener('keydown', keyHandler);
+                    resolve('space');
+                } else if (e.code === 'Escape') {
+                    e.preventDefault();
+                    window.removeEventListener('keydown', keyHandler);
+                    abortExperiment("ABORTED");
+                    resolve('escape');
+                }
+            };
+            window.addEventListener('keydown', keyHandler);
+        });
+    }
+
     function runSingleTrial(trial) {
         return new Promise(async (resolve) => {
             container.innerHTML = `
@@ -475,15 +511,22 @@
                 }
             } else {
                 displayDiv.innerHTML = renderMatrixHTML(trial.matrix, trial.rows, trial.cols);
-                await new Promise(r => setTimeout(r, 50));
-                displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
-                showInputScreen(trial, resolve);
+                if (trial.type === 'hold') {
+                    const res = await waitForSpaceOrEscape();
+                    if (abortRequested || res === 'escape') { resolve(); return; }
+                    displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
+                    showInputScreen(trial, resolve);
+                } else {
+                    await new Promise(r => setTimeout(r, 50));
+                    displayDiv.innerHTML = '<div style="color:#0a0a0a;"> </div>';
+                    showInputScreen(trial, resolve);
+                }
             }
         });
     }
 
     function showInputScreen(trial, resolve) {
-        const isWhole = (trial.type === 'whole');
+        const isWhole = (trial.type === 'whole' || trial.type === 'hold');
         const expectedCount = isWhole ? trial.totalLetters : trial.rowLength;
         const promptText = isWhole
             ? `请按刚才呈现的矩阵格式输入 ${expectedCount} 个字母`
@@ -535,6 +578,8 @@
             let delayValue;
             if (trial.type === 'whole') {
                 delayValue = 65537;
+            } else if (trial.type === 'hold') {
+                delayValue = 65538;
             } else {
                 delayValue = Number(trial.delayMs ?? 0) / 1000;
             }
@@ -619,6 +664,13 @@
                 <p class="info-text">同一界面下，可选择进行：全部报告法 / 部分报告法 / 时间延迟</p>
                 <div class="mode-box">
                     <label class="mode-row">
+                        <input type="radio" name="mode" value="hold">
+                        <div>
+                            <div><strong style="color:#ffaa66;">持续呈现（新模式）</strong></div>
+                            <div class="mode-desc">矩阵：2×3、2×4、3×3、3×4；矩阵会一直显示，直到你按空格键进入作答</div>
+                        </div>
+                    </label>
+                    <label class="mode-row">
                         <input type="radio" name="mode" value="whole" checked>
                         <div>
                             <div><strong style="color:#ffaa66;">全部报告法（实验1）</strong></div>
@@ -666,10 +718,11 @@
         currentTrialIndex = 0;
         experimentData = [];
 
+        const matrixDurationText = (mode === 'hold') ? '字母矩阵会持续停留，直到你按下空格' : '字母矩阵仅显示 50 毫秒';
         container.innerHTML = `
             <div class="screen">
                 <div class="title">斯珀林 (Sperling, 1960) 感觉记忆实验</div>
-                <p class="info-text">字母矩阵仅显示 50 毫秒</p>
+                <p class="info-text">${matrixDurationText}</p>
                 <p class="info-text"><strong style="color:#ffaa66;">高音</strong> → 第1行 &nbsp;&nbsp; <strong style="color:#ffaa66;">中音</strong> → 第2行 &nbsp;&nbsp; <strong style="color:#ffaa66;">低音</strong> → 第3行</p>
                 <p class="info-text">每次出现十字架时，<strong>按空格键</strong>开始下一个试次</p>
                 <p class="info-text">输入字母后，<strong>按回车键</strong>提交（Esc 可退出并导出）</p>
