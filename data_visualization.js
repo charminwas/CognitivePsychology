@@ -4,9 +4,9 @@
 const TARGET_PLOT_SIZE = 300;        // 图的大小
 const margin = { top: 20, right: 25, bottom: 40, left: 25 };
 
-// 分开控制：水平间距大一点，垂直间距小一点
+// 分开控制
 const gapH = 150;    // 水平间距（列之间）
-const gapV = 55;    // 垂直间距（行之间） 👈 调小这里
+const gapV = 55;    // 垂直间距（行之间）
 
 // 画布宽度：几乎贴边
 const totalWidth = Math.min(window.innerWidth - 30, window.innerWidth * 0.98);
@@ -114,6 +114,7 @@ d3.csv("real_data.csv").then(data => {
         d.output = safeNum(d.output);
         d.delay = safeNum(d.delay);
     });
+
 
     //实验1、实验3的数据和实验4的数据分开
     const raw_data_im = d3.filter(data, (item) => item.delay == 65537);
