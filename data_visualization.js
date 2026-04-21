@@ -97,7 +97,7 @@ function getAverageDe(data){
     ).flat();
     return [...ssAverages, ...globalAverageData];
 }
-//辅助函数：空/缺失数据=NaN
+//辅助函数：空/缺失数据=Na
 function safeNum(n){
     if (n === '' || n === null) return NaN;
     return +n;
@@ -107,7 +107,7 @@ function safeNum(n){
 // 3. 主程序：绘图
 // ======================
 //解析csv，字符串转数字
-d3.csv("real_data.csv").then(data => {
+d3.csv("data.csv").then(data => {
     // 字符串转数字
     data.forEach(d => {
         d.input = safeNum(d.input);

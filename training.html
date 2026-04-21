@@ -1,0 +1,1014 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sperling 训练模块（视觉/听觉/局部报告/防预测/过渡）</title>
+  <style>
+    * { box-sizing: border-box; user-select: none; }
+    html, body { margin: 0; padding: 0; width: 100%; height: 100%; background: #0a0a0a; }
+    body { display: flex; justify-content: center; align-items: center; font-family: "Segoe UI","SF Pro","Inter",Arial,sans-serif; color: #ddd; }
+    #container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; padding: 22px; }
+
+    .screen {
+      text-align: center;
+      background: #1a1a1a;
+      padding: 34px 34px 26px;
+      border-radius: 22px;
+      max-width: 980px;
+      width: min(980px, 95vw);
+      box-shadow: 0 0 30px rgba(0,0,0,0.35);
+      border: 1px solid #2a2a2a;
+    }
+    .title { font-size: 26px; font-weight: 800; color: #ffaa66; margin: 4px 0 14px; }
+    .subtitle { font-size: 16px; color: #bdbdbd; margin: 0 0 16px; line-height: 1.6; }
+    .info { font-size: 16px; color: #cfcfcf; line-height: 1.65; margin: 10px 0; text-align: left; }
+    .hint { font-size: 14px; color: #9f9f9f; margin-top: 12px; line-height: 1.5; }
+    .pill {
+      display: inline-block;
+      padding: 6px 10px;
+      border-radius: 999px;
+      border: 1px solid #333;
+      background: #111;
+      font-size: 13px;
+      color: #bbb;
+      margin: 0 6px 10px 0;
+    }
+    button {
+      background: #3a6ea5;
+      color: #fff;
+      font-size: 18px;
+      border: none;
+      border-radius: 10px;
+      padding: 10px 22px;
+      cursor: pointer;
+      transition: 0.18s;
+      margin: 10px 6px 0;
+    }
+    button:hover { background: #2c4e7a; }
+    button.secondary { background: #2b2b2b; border: 1px solid #3a3a3a; color: #eee; }
+    button.secondary:hover { background: #242424; }
+    button.danger { background: #7a2c2c; }
+    button.danger:hover { background: #5f2222; }
+
+    .stimulus-wrapper { display: flex; justify-content: center; align-items: center; min-height: 52vh; }
+    .fixation { font-size: 78px; color: #fff; line-height: 1; }
+    .matrix-grid {
+      display: inline-grid;
+      gap: 14px 28px;
+      justify-items: center;
+      align-items: center;
+      padding: 18px 16px;
+    }
+    .matrix-grid div {
+      font-size: 58px;
+      font-weight: 800;
+      color: #fff;
+      text-shadow: 0 0 2px rgba(255,255,255,0.2);
+      width: 86px;
+      text-align: center;
+    }
+
+    .recall-grid {
+      display: inline-grid;
+      gap: 12px 18px;
+      justify-items: center;
+      align-items: center;
+      padding: 16px 10px 6px;
+      margin-top: 8px;
+    }
+    .recall-cell {
+      width: 70px;
+      height: 74px;
+      font-size: 44px;
+      font-weight: 800;
+      text-transform: uppercase;
+      text-align: center;
+      color: #fff;
+      background: #2d2d2d;
+      border: 2px solid #5a5a5a;
+      border-radius: 10px;
+      outline: none;
+      line-height: 74px;
+      padding: 0;
+    }
+    .recall-cell:focus { border-color: #ffaa66; box-shadow: 0 0 0 3px rgba(255,170,102,0.14); }
+
+    .row-choices { display: flex; justify-content: center; gap: 12px; flex-wrap: wrap; margin-top: 14px; }
+    .choice-btn { background: #2b2b2b; border: 1px solid #3a3a3a; padding: 10px 16px; border-radius: 12px; font-size: 16px; }
+    .choice-btn:hover { background: #232323; }
+    .choice-btn strong { color: #ffaa66; }
+    .stats {
+      margin-top: 16px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      background: #141414;
+      border: 1px solid #262626;
+      text-align: left;
+      font-size: 14px;
+      color: #bbb;
+      line-height: 1.7;
+    }
+  </style>
+</head>
+<body>
+  <div id="container"></div>
+
+  <script>
+    // ==================== 共享配置 ====================
+    const CONSONANTS = ['B','C','D','F','G','H','J','K','L','M','N','P','Q','R','S','T','V','W','X','Z'];
+    const AUDIO_FREQS = { high: 2500, mid: 1000, low: 250 };
+    const AUDIO_GAIN = { high: 0.12, mid: 0.30, low: 0.42 };
+
+    const container = document.getElementById('container');
+    let audioContext = null;
+    let abortRequested = false;
+
+    // 训练记录（可扩展导出）
+    const trainingLog = {
+      subject: '',
+      startedAt: Date.now(),
+      stages: [],
+    };
+
+    function nowIso() { return new Date().toISOString(); }
+
+    function shuffleArray(arr) {
+      for (let i = arr.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [arr[i], arr[j]] = [arr[j], arr[i]];
+      }
+      return arr;
+    }
+
+    function generateMatrix(rows, cols) {
+      const shuffled = shuffleArray([...CONSONANTS]);
+      const selected = shuffled.slice(0, rows * cols);
+      const matrix = [];
+      for (let r = 0; r < rows; r++) {
+        const row = [];
+        for (let c = 0; c < cols; c++) row.push(selected[r * cols + c]);
+        matrix.push(row);
+      }
+      return matrix;
+    }
+
+    function renderMatrixHTML(matrix) {
+      const rows = matrix.length;
+      const cols = matrix[0]?.length || 0;
+      let html = `<div class="matrix-grid" style="grid-template-columns: repeat(${cols}, 86px);">`;
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) html += `<div>${matrix[r][c]}</div>`;
+      }
+      html += `</div>`;
+      return html;
+    }
+
+    function playTone(freq, gainVal) {
+      if (!audioContext) return;
+      const doPlay = () => {
+        const now = audioContext.currentTime;
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(gainVal, now);
+        gain.gain.exponentialRampToValueAtTime(0.00001, now + 0.20);
+        osc.start();
+        osc.stop(now + 0.20);
+      };
+      if (audioContext.state === 'suspended') audioContext.resume().then(doPlay);
+      else doPlay();
+    }
+
+    function playCueByRow(rowNum, totalRows = 3) {
+      // 3行：上/中/下 -> 高/中/低
+      if (totalRows === 2) {
+        if (rowNum === 1) playTone(AUDIO_FREQS.high, AUDIO_GAIN.high);
+        if (rowNum === 2) playTone(AUDIO_FREQS.low, AUDIO_GAIN.low);
+        return;
+      }
+      if (rowNum === 1) playTone(AUDIO_FREQS.high, AUDIO_GAIN.high);
+      else if (rowNum === 2) playTone(AUDIO_FREQS.mid, AUDIO_GAIN.mid);
+      else if (rowNum === 3) playTone(AUDIO_FREQS.low, AUDIO_GAIN.low);
+    }
+
+    function waitForKey(acceptCodes) {
+      return new Promise((resolve) => {
+        const handler = (e) => {
+          if (e.code === 'Escape') {
+            e.preventDefault();
+            window.removeEventListener('keydown', handler);
+            abortRequested = true;
+            resolve('Escape');
+            return;
+          }
+          if (acceptCodes.includes(e.code)) {
+            e.preventDefault();
+            window.removeEventListener('keydown', handler);
+            resolve(e.code);
+          }
+        };
+        window.addEventListener('keydown', handler);
+      });
+    }
+
+    function computeScore(targetArr, userArr) {
+      let correct = 0;
+      for (let i = 0; i < Math.min(targetArr.length, userArr.length); i++) {
+        if (targetArr[i] === userArr[i]) correct++;
+      }
+      return correct;
+    }
+
+    function normalizeChar(val) {
+      return String(val || '').toUpperCase().replace(/[^A-Z]/g, '').slice(0, 1);
+    }
+
+    function inferRowMistake(matrix, targetRowIdx0, userArr) {
+      // 识别“填错行”：如果用户输入与某一行的匹配明显高于目标行，则认为填错行。
+      // 返回：{ kind: 'ok'|'wrong_row'|'other', bestRowIdx0, scores }
+      const rowScores = matrix.map(row => computeScore(row, userArr));
+      const bestScore = Math.max(...rowScores);
+      const bestRowIdx0 = rowScores.findIndex(s => s === bestScore);
+      const targetScore = rowScores[targetRowIdx0] ?? 0;
+      if (bestRowIdx0 !== targetRowIdx0 && bestScore >= Math.max(2, targetScore + 1)) {
+        return { kind: 'wrong_row', bestRowIdx0, scores: rowScores };
+      }
+      if (bestRowIdx0 === targetRowIdx0) return { kind: 'ok', bestRowIdx0, scores: rowScores };
+      return { kind: 'other', bestRowIdx0, scores: rowScores };
+    }
+
+    function stageStatsToText(stats) {
+      const parts = [];
+      if (stats.trials != null) parts.push(`试次：${stats.trials}`);
+      if (stats.correct != null) parts.push(`正确：${stats.correct}`);
+      if (stats.acc != null) parts.push(`正确率：${Math.round(stats.acc * 100)}%`);
+      if (stats.note) parts.push(stats.note);
+      return parts.join('｜');
+    }
+
+    async function ensureAudioReady() {
+      if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      if (audioContext.state === 'suspended') await audioContext.resume();
+    }
+
+    function showScreen({ title, subtitle, pills = [], bodyHtml = '', buttons = [] }) {
+      const pillsHtml = pills.map(t => `<span class="pill">${t}</span>`).join('');
+      const buttonsHtml = buttons.map(b => `<button id="${b.id}" class="${b.className || ''}">${b.text}</button>`).join('');
+      container.innerHTML = `
+        <div class="screen">
+          <div class="title">${title}</div>
+          ${subtitle ? `<div class="subtitle">${subtitle}</div>` : ''}
+          ${pillsHtml ? `<div style="margin-bottom:10px;">${pillsHtml}</div>` : ''}
+          <div>${bodyHtml}</div>
+          <div style="margin-top:12px;">${buttonsHtml}</div>
+          <div class="hint">提示：空格=继续（在需要时），回车=提交（输入时），Esc=退出训练</div>
+        </div>
+      `;
+      for (const b of buttons) {
+        document.getElementById(b.id)?.addEventListener('click', b.onClick);
+      }
+    }
+
+    function abortToHome() {
+      abortRequested = false;
+      showTrainingMenu();
+    }
+
+    // ==================== Stage 0: 入口/被试信息 ====================
+    function showIntro() {
+      showScreen({
+        title: '训练模块（Sperling 复现）',
+        subtitle: '请先填写被试信息，然后从菜单中自主选择要进行的训练项目。',
+        pills: ['无计分训练', '自主选择训练项目', 'Esc 可随时退出'],
+        bodyHtml: `
+          <div class="info">
+            <div><strong style="color:#ffaa66;">视觉反应训练</strong>：先看无时间限制的字母矩阵样本熟悉版式，再做 3 字母/4 字母全报告练习。</div>
+            <div style="margin-top:8px;"><strong style="color:#ffaa66;">听觉关联训练</strong>：不呈现视觉刺激，单独播放提示音，要求说出上/中/下对应关系直到形成肌肉记忆（这里用按键/按钮代替口头回答）。</div>
+            <div style="margin-top:8px;"><strong style="color:#ffaa66;">0ms 局部报告训练</strong>：矩阵显示 50ms 并立刻消失，消失瞬间播放提示音；训练到不再因“听错/填错行”失分。</div>
+            <div style="margin-top:8px;"><strong style="color:#ffaa66;">防预测训练</strong>：插入“声音先于画面”的特殊试次，强化依赖提示音的策略。</div>
+            <div style="margin-top:8px;"><strong style="color:#ffaa66;">过渡阶段训练</strong>：引入新的延迟条件前，先给 2-3 个不计分试次适应等待节奏。</div>
+          </div>
+          <div style="margin-top:12px;">
+            <input id="subj" type="text" maxlength="16" placeholder="被试编号/姓名" style="background:#2d2d2d;border:2px solid #5a5a5a;color:#0f0;font-size:20px;padding:12px 14px;border-radius:10px;outline:none;width:min(340px, 80vw);text-align:center;">
+          </div>
+        `,
+        buttons: [
+          { id: 'start', text: '进入训练菜单', onClick: async () => {
+              const name = (document.getElementById('subj')?.value || '').trim();
+              if (!name) { alert('请输入被试信息'); return; }
+              trainingLog.subject = name;
+              trainingLog.stages = [];
+              await ensureAudioReady();
+              showTrainingMenu();
+            } },
+        ]
+      });
+    }
+
+    function showTrainingMenu() {
+      if (!trainingLog.subject) { showIntro(); return; }
+
+      const summary = summarizeTraining();
+      showScreen({
+        title: '训练菜单',
+        subtitle: '请选择要进行的训练项目（可重复进行，结果会累计记录在本页汇总中）。',
+        pills: [ `被试：${trainingLog.subject}` ],
+        bodyHtml: `
+          <div class="info">
+            <div><strong style="color:#ffaa66;">建议顺序</strong>：视觉样本 → 全报告(3) → 全报告(4) → 听觉关联 → 0ms 局部报告 → 防预测 → 过渡适应</div>
+          </div>
+          <div class="stats" style="white-space:pre-wrap;">${summary || '（尚无训练记录）'}</div>
+        `,
+        buttons: [
+          { id: 'm1', text: '视觉熟悉：无时间限制样本', onClick: async () => { await stageVisualSamples(); } },
+          { id: 'm2', text: '全报告练习：3 字母', onClick: async () => { await stageWholeReportPractice({ cols: 3, label: '3 字母', minTrials: 5, maxTrials: 20, stabilityWindow: 6 }); showTrainingMenu(); } },
+          { id: 'm3', text: '全报告练习：4 字母', onClick: async () => { await stageWholeReportPractice({ cols: 4, label: '4 字母', minTrials: 5, maxTrials: 20, stabilityWindow: 6 }); showTrainingMenu(); } },
+          { id: 'm4', text: '听觉关联训练（无视觉）', onClick: async () => { await stageAuditoryAssociation(); showTrainingMenu(); } },
+          { id: 'm5', text: '0ms 局部报告训练', onClick: async () => { await stageZeroDelayPartialReport(); showTrainingMenu(); } },
+          { id: 'm6', text: '防预测训练（声音先于画面）', onClick: async () => { await stageAntiPrediction(); showTrainingMenu(); } },
+          { id: 'm7', text: '过渡阶段训练（适应延迟节奏）', onClick: async () => { await stageTransitionWarmups(); showTrainingMenu(); } },
+          { id: 'reset', text: '清空记录（本页）', className: 'secondary', onClick: () => { trainingLog.stages = []; trainingLog.startedAt = Date.now(); showTrainingMenu(); } },
+          { id: 'newsubj', text: '更换被试', className: 'secondary', onClick: () => { trainingLog.subject = ''; trainingLog.stages = []; trainingLog.startedAt = Date.now(); showIntro(); } },
+        ]
+      });
+    }
+
+    // ==================== Stage 1: 视觉熟悉 + 全报告练习 ====================
+    async function stageVisualSamples() {
+      const stage = { name: 'visual_familiarization', startedAt: nowIso(), events: [] };
+      trainingLog.stages.push(stage);
+
+      showScreen({
+        title: '视觉反应训练（熟悉样本）',
+        subtitle: '先观看几个无时间限制的字母矩阵样本，熟悉字体、大小与网格布局。',
+        pills: ['无时间限制', '按空格切换样本'],
+        bodyHtml: `
+          <div class="stimulus-wrapper"><div id="display"></div></div>
+          <div class="stats" id="stats"></div>
+        `,
+        buttons: [
+          { id: 'exit', text: '退出训练', className: 'danger', onClick: () => abortToHome() },
+        ]
+      });
+
+      const display = document.getElementById('display');
+      const statsEl = document.getElementById('stats');
+      const samples = [
+        { rows: 3, cols: 3 }, { rows: 2, cols: 4 }, { rows: 3, cols: 4 }, { rows: 2, cols: 3 }
+      ];
+      for (let i = 0; i < samples.length; i++) {
+        if (abortRequested) return;
+        const s = samples[i];
+        const matrix = generateMatrix(s.rows, s.cols);
+        display.innerHTML = renderMatrixHTML(matrix);
+        statsEl.textContent = `样本 ${i + 1}/${samples.length}（${s.rows}×${s.cols}）— 按空格继续`;
+        stage.events.push({ t: nowIso(), kind: 'sample_shown', rows: s.rows, cols: s.cols });
+        const key = await waitForKey(['Space']);
+        if (key === 'Escape') return;
+      }
+
+      showScreen({
+        title: '视觉反应训练（熟悉样本）完成',
+        subtitle: '已完成样本熟悉。你可以返回菜单选择下一项训练。',
+        pills: [],
+        bodyHtml: '',
+        buttons: [
+          { id: 'back', text: '返回训练菜单', onClick: () => showTrainingMenu() },
+          { id: 'exit', text: '退出训练', className: 'danger', onClick: () => showIntro() },
+        ]
+      });
+    }
+
+    async function stageWholeReportPractice({ cols, label, minTrials, maxTrials, stabilityWindow }) {
+      const stage = { name: `whole_report_${cols}`, startedAt: nowIso(), events: [], params: { cols, label, minTrials, maxTrials, stabilityWindow } };
+      trainingLog.stages.push(stage);
+
+      const rows = 1;
+      const expectedCount = cols;
+      const results = []; // { correct, acc }
+
+      const stabilityReached = () => {
+        if (results.length < minTrials) return false;
+        if (results.length < stabilityWindow) return false;
+        const last = results.slice(-Math.floor(stabilityWindow/2));
+        const prev = results.slice(-stabilityWindow, -Math.floor(stabilityWindow/2));
+        const avg = (arr) => arr.reduce((s, x) => s + x.acc, 0) / Math.max(1, arr.length);
+        const delta = avg(last) - avg(prev);
+        // “不再有明显提升”：最近半窗口相对前半窗口提升 < 10%
+        return delta < 0.10;
+      };
+
+      for (let t = 0; t < maxTrials; t++) {
+        if (abortRequested) return;
+        const trialIndex = t + 1;
+        const matrix = generateMatrix(rows, cols);
+        const target = matrix.flat();
+
+        // 刺激呈现（无时间限制）：按空格进入作答
+        container.innerHTML = `
+          <div class="screen">
+            <div class="title">全报告练习（${label}）</div>
+            <div class="subtitle">先看清字母，再按空格进入输入。最少 ${minTrials} 次，表现稳定后结束本项目。</div>
+            <div class="stimulus-wrapper"><div id="display">${renderMatrixHTML(matrix)}</div></div>
+            <div class="stats" id="stats">试次 ${trialIndex} / 至少 ${minTrials}（按空格进入作答，Esc 退出）</div>
+            <div style="margin-top:10px;">
+              <button id="exit" class="danger">退出训练</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('exit')?.addEventListener('click', () => abortToHome());
+        stage.events.push({ t: nowIso(), kind: 'trial_shown', trialIndex, cols, target: target.join('') });
+
+        const key = await waitForKey(['Space']);
+        if (key === 'Escape') return;
+
+        // 输入界面
+        let cellsHtml = '';
+        for (let i = 0; i < expectedCount; i++) cellsHtml += `<input class="recall-cell" maxlength="1" inputmode="latin" autocomplete="off" autocapitalize="characters" spellcheck="false" data-idx="${i}">`;
+        container.innerHTML = `
+          <div class="screen">
+            <div class="title">全报告练习（${label}）</div>
+            <div class="subtitle">请输入刚才看到的 ${expectedCount} 个字母。填满后按回车提交。</div>
+            <div class="recall-grid" id="grid" style="grid-template-columns: repeat(${expectedCount}, 70px);">${cellsHtml}</div>
+            <div class="stats" id="stats"></div>
+            <div style="margin-top:10px;">
+              <button id="exit" class="danger">退出训练</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('exit')?.addEventListener('click', () => abortToHome());
+
+        const inputs = Array.from(document.querySelectorAll('.recall-cell'));
+        const isComplete = () => inputs.every(el => !!normalizeChar(el.value));
+        const statsEl = document.getElementById('stats');
+
+        const moveFocus = (idx, dir) => {
+          const next = idx + dir;
+          if (next >= 0 && next < inputs.length) inputs[next].focus();
+        };
+
+        const userLetters = await new Promise((resolve) => {
+          const submit = () => {
+            if (!isComplete()) return;
+            resolve(inputs.map(el => normalizeChar(el.value)));
+          };
+          inputs.forEach((el, idx) => {
+            el.addEventListener('input', (e) => {
+              const v = normalizeChar(e.target.value);
+              e.target.value = v;
+              if (v) moveFocus(idx, 1);
+              if (statsEl) statsEl.textContent = isComplete() ? '已填满：按回车提交' : '填满后按回车提交';
+            });
+            el.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submit(); return; }
+              if (e.key === 'Escape') { e.preventDefault(); abortRequested = true; resolve(null); return; }
+              if (e.key === 'Backspace' && !normalizeChar(el.value)) { e.preventDefault(); moveFocus(idx, -1); }
+              if (e.key === 'ArrowLeft') { e.preventDefault(); moveFocus(idx, -1); }
+              if (e.key === 'ArrowRight') { e.preventDefault(); moveFocus(idx, 1); }
+            });
+          });
+          inputs[0]?.focus();
+        });
+        if (abortRequested || userLetters == null) return;
+
+        const correct = computeScore(target, userLetters);
+        const acc = correct / expectedCount;
+        results.push({ correct, acc });
+        stage.events.push({ t: nowIso(), kind: 'trial_response', trialIndex, user: userLetters.join(''), correct, acc });
+
+        // 反馈 + 是否稳定
+        const recentAcc = results.slice(-Math.min(results.length, 10)).reduce((s, x) => s + x.acc, 0) / Math.min(results.length, 10);
+        const stable = stabilityReached();
+        const canAdvance = stable && results.length >= minTrials;
+        showScreen({
+          title: `全报告练习（${label}）反馈`,
+          subtitle: canAdvance ? '表现已趋于稳定，本项目已达标。' : '继续练习，直到成绩不再明显提升。',
+          pills: [ `本次：${correct}/${expectedCount}`, `近10次均值：${Math.round(recentAcc*100)}%`, stable ? '稳定：是' : '稳定：否' ],
+          bodyHtml: `
+            <div class="info">
+              <div><strong>判定逻辑</strong>：至少 ${minTrials} 次；最近 ${Math.floor(stabilityWindow/2)} 次平均正确率相对前 ${Math.floor(stabilityWindow/2)} 次提升 < 10% 则认为“无明显提升”。</div>
+            </div>
+          `,
+          buttons: [
+            { id: 'continue', text: canAdvance ? '返回训练菜单' : '继续下一试次', onClick: () => {} },
+            { id: 'exit', text: '退出训练', className: 'danger', onClick: () => abortToHome() },
+          ]
+        });
+        const key2 = await waitForKey(['Space']);
+        if (key2 === 'Escape') return;
+        if (canAdvance) { showTrainingMenu(); return; }
+      }
+    }
+
+    // ==================== Stage 2: 听觉关联训练 ====================
+    async function stageAuditoryAssociation() {
+      const stage = { name: 'auditory_association', startedAt: nowIso(), events: [], params: { targetStreak: 12, maxTrials: 60 } };
+      trainingLog.stages.push(stage);
+      await ensureAudioReady();
+
+      let streak = 0;
+      let trials = 0;
+      let correct = 0;
+      const targetStreak = stage.params.targetStreak;
+      const maxTrials = stage.params.maxTrials;
+
+      const getRowLabel = (row) => row === 1 ? '上' : (row === 2 ? '中' : '下');
+
+      while (!abortRequested && trials < maxTrials && streak < targetStreak) {
+        trials++;
+        const row = shuffleArray([1,2,3])[0];
+        stage.events.push({ t: nowIso(), kind: 'tone_play', trial: trials, row });
+
+        showScreen({
+          title: '听觉关联训练（无视觉刺激）',
+          subtitle: '系统将播放提示音，请你“说出对应行位”（这里用按钮/按键代替）。做到连续正确一段时间，形成肌肉记忆。',
+          pills: [ `连续正确：${streak}/${targetStreak}`, `累计正确：${correct}/${trials}` ],
+          bodyHtml: `
+            <div class="stimulus-wrapper" style="min-height:220px;">
+              <div>
+                <div style="font-size:18px;color:#cfcfcf;">准备好后按“播放”</div>
+                <div class="row-choices" style="margin-top:16px;">
+                  <button id="play" class="choice-btn"><strong>播放</strong> 提示音</button>
+                </div>
+              </div>
+            </div>
+            <div class="row-choices">
+              <button class="choice-btn" id="r1"><strong>1</strong>：上（高音）</button>
+              <button class="choice-btn" id="r2"><strong>2</strong>：中（中音）</button>
+              <button class="choice-btn" id="r3"><strong>3</strong>：下（低音）</button>
+            </div>
+            <div class="stats" id="stats">
+              可用快捷键：1/2/3 选择行位。每次播放后再作答。
+            </div>
+          `,
+          buttons: [
+            { id: 'exit', text: '退出训练', className: 'danger', onClick: () => abortToHome() },
+          ]
+        });
+
+        let played = false;
+        const statsEl = document.getElementById('stats');
+        const playBtn = document.getElementById('play');
+        playBtn?.addEventListener('click', () => {
+          playCueByRow(row, 3);
+          played = true;
+          if (statsEl) statsEl.textContent = '已播放：请选择对应行位（1/2/3）';
+        });
+
+        const answer = await new Promise((resolve) => {
+          const finish = (ans) => resolve(ans);
+          const onKey = (e) => {
+            if (e.key === '1') finish(1);
+            if (e.key === '2') finish(2);
+            if (e.key === '3') finish(3);
+            if (e.key === 'Escape') { abortRequested = true; finish(null); }
+          };
+          const bind = (id, val) => document.getElementById(id)?.addEventListener('click', () => finish(val));
+          bind('r1', 1); bind('r2', 2); bind('r3', 3);
+          window.addEventListener('keydown', onKey, { once: true });
+        });
+        if (abortRequested || answer == null) return;
+
+        if (!played) {
+          // 容错：若未点播放直接作答，仍播放一次并按错误计（提醒形成固定流程）
+          playCueByRow(row, 3);
+        }
+
+        const ok = (answer === row);
+        correct += ok ? 1 : 0;
+        streak = ok ? (streak + 1) : 0;
+        stage.events.push({ t: nowIso(), kind: 'tone_answer', trial: trials, answer, ok, row });
+
+        showScreen({
+          title: '听觉关联训练反馈',
+          subtitle: ok ? '正确。' : `不正确。本次是“${getRowLabel(row)}”（请把提示音与行位建立稳定联结）。`,
+          pills: [ ok ? '结果：正确' : '结果：错误', `连续正确：${streak}/${targetStreak}` ],
+          bodyHtml: `
+            <div class="info">
+              <div><strong>映射关系</strong>：高音=上行｜中音=中行｜低音=下行</div>
+            </div>
+          `,
+          buttons: [
+            { id: 'next', text: (streak >= targetStreak) ? '进入下一阶段' : '继续下一次', onClick: () => {} },
+            { id: 'exit', text: '退出训练', className: 'danger', onClick: () => abortToHome() },
+          ]
+        });
+        await waitForKey(['Space']);
+        if (abortRequested) return;
+      }
+
+      // 达标或到达最大次数后，返回菜单（由菜单继续选择）
+    }
+
+    // ==================== Stage 3: 0ms 延迟局部报告训练 ====================
+    async function stageZeroDelayPartialReport() {
+      const stage = { name: 'partial_0ms', startedAt: nowIso(), events: [], params: { minTrials: 10, maxTrials: 20, stabilityWindow: 10, targetMistakeRate: 0.10 } };
+      trainingLog.stages.push(stage);
+      await ensureAudioReady();
+
+      const rows = 3, cols = 3;
+      const minTrials = stage.params.minTrials;
+      const maxTrials = stage.params.maxTrials;
+      const stabilityWindow = stage.params.stabilityWindow;
+      const targetMistakeRate = stage.params.targetMistakeRate;
+
+      const outcomes = []; // { ok, wrongRow, correctLetters, targetRow }
+
+      const isStable = () => {
+        if (outcomes.length < minTrials) return false;
+        const window = outcomes.slice(-Math.min(stabilityWindow, outcomes.length));
+        const wrongRowRate = window.filter(x => x.wrongRow).length / window.length;
+        const okRate = window.filter(x => x.ok).length / window.length;
+        // 稳定：填错行很少，并且正确率较高
+        return wrongRowRate <= targetMistakeRate && okRate >= 0.55;
+      };
+
+      for (let i = 0; i < maxTrials; i++) {
+        if (abortRequested) return;
+        const trialIndex = i + 1;
+        const matrix = generateMatrix(rows, cols);
+        const targetRow = shuffleArray([1,2,3])[0];
+
+        // Fixation
+        container.innerHTML = `
+          <div class="screen">
+            <div class="title">0ms 局部报告训练</div>
+            <div class="subtitle">十字出现时按空格开始该试次。矩阵仅 50ms，消失瞬间（0ms）播放提示音。</div>
+            <div class="stimulus-wrapper"><div class="fixation">+</div></div>
+            <div class="stats">试次 ${trialIndex}/${maxTrials}（至少 ${minTrials}）</div>
+            <div style="margin-top:10px;">
+              <button id="exit" class="danger">退出训练</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('exit')?.addEventListener('click', () => abortToHome());
+        const k = await waitForKey(['Space']);
+        if (k === 'Escape') return;
+
+        // 显示矩阵 50ms -> 清屏 & 立刻提示音
+        container.innerHTML = `
+          <div class="stimulus-wrapper" style="width:100%;">
+            <div id="display"></div>
+          </div>
+        `;
+        const display = document.getElementById('display');
+        display.innerHTML = renderMatrixHTML(matrix);
+        stage.events.push({ t: nowIso(), kind: 'matrix_shown', trialIndex, targetRow, matrix: matrix.map(r => r.join('')).join('|') });
+        await new Promise(r => setTimeout(r, 50));
+        display.innerHTML = '<div style="color:#0a0a0a;"> </div>';
+        playCueByRow(targetRow, 3); // 0ms 延迟
+
+        // 输入目标行的 3 个字母
+        const expectedCount = cols;
+        let cellsHtml = '';
+        for (let c = 0; c < expectedCount; c++) cellsHtml += `<input class="recall-cell" maxlength="1" inputmode="latin" autocomplete="off" autocapitalize="characters" spellcheck="false" data-idx="${c}">`;
+        container.innerHTML = `
+          <div class="screen">
+            <div class="title">0ms 局部报告训练</div>
+            <div class="subtitle">请输入<strong style="color:#ffaa66;">被提示那一行</strong>的 ${expectedCount} 个字母。填满后按回车提交。</div>
+            <div class="recall-grid" style="grid-template-columns: repeat(${expectedCount}, 70px);">${cellsHtml}</div>
+            <div class="stats" id="stats">提示：高=上｜中=中｜低=下</div>
+            <div style="margin-top:10px;">
+              <button id="exit" class="danger">退出训练</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('exit')?.addEventListener('click', () => abortToHome());
+        const inputs = Array.from(document.querySelectorAll('.recall-cell'));
+        const statsEl = document.getElementById('stats');
+        const isComplete = () => inputs.every(el => !!normalizeChar(el.value));
+        const moveFocus = (idx, dir) => {
+          const next = idx + dir;
+          if (next >= 0 && next < inputs.length) inputs[next].focus();
+        };
+
+        const userLetters = await new Promise((resolve) => {
+          const submit = () => { if (isComplete()) resolve(inputs.map(el => normalizeChar(el.value))); };
+          inputs.forEach((el, idx) => {
+            el.addEventListener('input', (e) => {
+              const v = normalizeChar(e.target.value);
+              e.target.value = v;
+              if (v) moveFocus(idx, 1);
+              if (statsEl) statsEl.textContent = isComplete() ? '已填满：按回车提交' : '填满后按回车提交';
+            });
+            el.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submit(); return; }
+              if (e.key === 'Escape') { e.preventDefault(); abortRequested = true; resolve(null); return; }
+              if (e.key === 'Backspace' && !normalizeChar(el.value)) { e.preventDefault(); moveFocus(idx, -1); }
+              if (e.key === 'ArrowLeft') { e.preventDefault(); moveFocus(idx, -1); }
+              if (e.key === 'ArrowRight') { e.preventDefault(); moveFocus(idx, 1); }
+            });
+          });
+          inputs[0]?.focus();
+        });
+        if (abortRequested || userLetters == null) return;
+
+        const targetArr = matrix[targetRow - 1];
+        const correctLetters = computeScore(targetArr, userLetters);
+        const ok = (correctLetters === expectedCount);
+        const rowCheck = inferRowMistake(matrix, targetRow - 1, userLetters);
+        const wrongRow = rowCheck.kind === 'wrong_row';
+        outcomes.push({ ok, wrongRow, correctLetters, targetRow });
+        stage.events.push({ t: nowIso(), kind: 'response', trialIndex, user: userLetters.join(''), correctLetters, ok, wrongRow, rowScores: rowCheck.scores });
+
+        const window = outcomes.slice(-Math.min(stabilityWindow, outcomes.length));
+        const wrongRowRate = window.filter(x => x.wrongRow).length / window.length;
+        const okRate = window.filter(x => x.ok).length / window.length;
+        const stable = isStable();
+        const canAdvance = stable && outcomes.length >= minTrials;
+
+        showScreen({
+          title: '0ms 局部报告训练反馈',
+          subtitle: canAdvance ? '听觉-行位-作答已较稳定，可以进入下一阶段训练。' : '继续练习，直到不再因“听错/填错行”而明显失分。',
+          pills: [
+            `本次正确字母：${correctLetters}/${expectedCount}`,
+            wrongRow ? '疑似：填错行' : '填错行：否/不明显',
+            `近${window.length}次错行率：${Math.round(wrongRowRate*100)}%`,
+            `近${window.length}次满分率：${Math.round(okRate*100)}%`,
+          ],
+          bodyHtml: `
+            <div class="info">
+              <div><strong>达标条件（简化）</strong>：至少 ${minTrials} 次；最近最多 ${stabilityWindow} 次中“填错行”比例 ≤ ${Math.round(targetMistakeRate*100)}%，且满分率达到一定水平。</div>
+            </div>
+          `,
+          buttons: [
+            { id: 'next', text: canAdvance ? '进入防预测训练' : '继续下一试次', onClick: () => {} },
+            { id: 'exit', text: '退出训练', className: 'danger', onClick: () => abortToHome() },
+          ]
+        });
+        await waitForKey(['Space']);
+        if (abortRequested) return;
+        if (canAdvance) break;
+      }
+
+      // 达标或到达最大次数后，返回菜单（由菜单继续选择）
+    }
+
+    // ==================== Stage 4: 防预测训练（声音先于画面） ====================
+    async function stageAntiPrediction() {
+      const stage = { name: 'anti_prediction', startedAt: nowIso(), events: [], params: { trials: 9, cueLeadMs: 120 } };
+      trainingLog.stages.push(stage);
+      await ensureAudioReady();
+
+      const trials = stage.params.trials;
+      const cueLeadMs = stage.params.cueLeadMs;
+      const rows = 3, cols = 3;
+
+      for (let i = 0; i < trials; i++) {
+        if (abortRequested) return;
+        const trialIndex = i + 1;
+        const matrix = generateMatrix(rows, cols);
+        const targetRow = shuffleArray([1,2,3])[0];
+
+        showScreen({
+          title: '防预测训练（声音先于画面）',
+          subtitle: '本阶段故意让提示音先响，你可以轻松拿高分。目的：让你习惯“依赖提示音选择目标行”，减少主观盯某一行的冲动。',
+          pills: [ `试次 ${trialIndex}/${trials}`, `提示音领先：${cueLeadMs}ms` ],
+          bodyHtml: `
+            <div class="stimulus-wrapper"><div class="fixation">+</div></div>
+            <div class="stats">按空格开始该试次</div>
+          `,
+          buttons: [
+            { id: 'exit', text: '退出训练', className: 'danger', onClick: () => abortToHome() },
+          ]
+        });
+        const k = await waitForKey(['Space']);
+        if (k === 'Escape') return;
+
+        // 先响提示音
+        playCueByRow(targetRow, 3);
+        await new Promise(r => setTimeout(r, cueLeadMs));
+
+        // 再显示矩阵：这里不限制时间（更“奖励”）
+        container.innerHTML = `
+          <div class="screen">
+            <div class="title">防预测训练（声音先于画面）</div>
+            <div class="subtitle">提示音已响。请把注意力移到目标行，然后按空格进入作答。</div>
+            <div class="stimulus-wrapper"><div id="display">${renderMatrixHTML(matrix)}</div></div>
+            <div class="stats">按空格进入输入（Esc 退出）</div>
+            <div style="margin-top:10px;">
+              <button id="exit" class="danger">退出训练</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('exit')?.addEventListener('click', () => abortToHome());
+        stage.events.push({ t: nowIso(), kind: 'anti_trial', trialIndex, targetRow, cueLeadMs, matrix: matrix.map(r => r.join('')).join('|') });
+
+        const k2 = await waitForKey(['Space']);
+        if (k2 === 'Escape') return;
+
+        // 输入目标行
+        const expectedCount = cols;
+        let cellsHtml = '';
+        for (let c = 0; c < expectedCount; c++) cellsHtml += `<input class="recall-cell" maxlength="1" inputmode="latin" autocomplete="off" autocapitalize="characters" spellcheck="false" data-idx="${c}">`;
+        container.innerHTML = `
+          <div class="screen">
+            <div class="title">防预测训练（作答）</div>
+            <div class="subtitle">请输入目标行（被提示那一行）的 ${expectedCount} 个字母。填满后按回车提交。</div>
+            <div class="recall-grid" style="grid-template-columns: repeat(${expectedCount}, 70px);">${cellsHtml}</div>
+            <div class="stats" id="stats">提示：高=上｜中=中｜低=下</div>
+            <div style="margin-top:10px;">
+              <button id="exit" class="danger">退出训练</button>
+            </div>
+          </div>
+        `;
+        document.getElementById('exit')?.addEventListener('click', () => abortToHome());
+        const inputs = Array.from(document.querySelectorAll('.recall-cell'));
+        const statsEl = document.getElementById('stats');
+        const isComplete = () => inputs.every(el => !!normalizeChar(el.value));
+        const moveFocus = (idx, dir) => {
+          const next = idx + dir;
+          if (next >= 0 && next < inputs.length) inputs[next].focus();
+        };
+        const userLetters = await new Promise((resolve) => {
+          const submit = () => { if (isComplete()) resolve(inputs.map(el => normalizeChar(el.value))); };
+          inputs.forEach((el, idx) => {
+            el.addEventListener('input', (e) => {
+              const v = normalizeChar(e.target.value);
+              e.target.value = v;
+              if (v) moveFocus(idx, 1);
+              if (statsEl) statsEl.textContent = isComplete() ? '已填满：按回车提交' : '填满后按回车提交';
+            });
+            el.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter') { e.preventDefault(); submit(); return; }
+              if (e.key === 'Escape') { e.preventDefault(); abortRequested = true; resolve(null); return; }
+              if (e.key === 'Backspace' && !normalizeChar(el.value)) { e.preventDefault(); moveFocus(idx, -1); }
+              if (e.key === 'ArrowLeft') { e.preventDefault(); moveFocus(idx, -1); }
+              if (e.key === 'ArrowRight') { e.preventDefault(); moveFocus(idx, 1); }
+            });
+          });
+          inputs[0]?.focus();
+        });
+        if (abortRequested || userLetters == null) return;
+
+        const targetArr = matrix[targetRow - 1];
+        const correctLetters = computeScore(targetArr, userLetters);
+        stage.events.push({ t: nowIso(), kind: 'anti_answer', trialIndex, user: userLetters.join(''), correctLetters });
+
+        showScreen({
+          title: '防预测训练反馈',
+          subtitle: `本次正确字母：${correctLetters}/${expectedCount}。这种“更容易拿高分”的体验会强化你依赖提示音的策略。`,
+          pills: [ `目标行：${targetRow}` ],
+          bodyHtml: '',
+          buttons: [
+            { id: 'next', text: (trialIndex === trials) ? '返回训练菜单' : '继续下一次', onClick: () => {} },
+            { id: 'exit', text: '退出训练', className: 'danger', onClick: () => abortToHome() },
+          ]
+        });
+        await waitForKey(['Space']);
+        if (abortRequested) return;
+      }
+    }
+
+    // ==================== Stage 5: 过渡阶段训练（适应新延迟节奏） ====================
+    async function stageTransitionWarmups() {
+      const stage = { name: 'transition_warmups', startedAt: nowIso(), events: [], params: { delaysMs: [150, 500, 1000], warmupsPerDelay: 3 } };
+      trainingLog.stages.push(stage);
+      await ensureAudioReady();
+
+      const rows = 3, cols = 3;
+      const { delaysMs, warmupsPerDelay } = stage.params;
+
+      for (let dIdx = 0; dIdx < delaysMs.length; dIdx++) {
+        const delayMs = delaysMs[dIdx];
+        // 进入该延迟前给 2-3 个不计分试次适应
+        showScreen({
+          title: '过渡阶段训练',
+          subtitle: `即将引入新的延迟条件：${delayMs/1000}s。先做 ${warmupsPerDelay} 个不计分试次，适应等待节奏。`,
+          pills: [ `延迟：${delayMs}ms`, `热身：${warmupsPerDelay} 次（不计分）` ],
+          bodyHtml: `<div class="info"><div>按空格开始热身。</div></div>`,
+          buttons: [
+            { id: 'exit', text: '退出训练', className: 'danger', onClick: () => abortToHome() },
+          ]
+        });
+        const k = await waitForKey(['Space']);
+        if (k === 'Escape') return;
+
+        for (let w = 0; w < warmupsPerDelay; w++) {
+          if (abortRequested) return;
+          const matrix = generateMatrix(rows, cols);
+          const targetRow = shuffleArray([1,2,3])[0];
+          stage.events.push({ t: nowIso(), kind: 'warmup_start', delayMs, w: w+1, targetRow });
+
+          // fixation
+          container.innerHTML = `
+            <div class="screen">
+              <div class="title">过渡热身（不计分）</div>
+              <div class="subtitle">按空格开始本次热身：矩阵 50ms，之后等待 ${delayMs}ms 再播放提示音。</div>
+              <div class="stimulus-wrapper"><div class="fixation">+</div></div>
+              <div class="stats">延迟 ${delayMs}ms｜热身 ${w+1}/${warmupsPerDelay}</div>
+              <div style="margin-top:10px;">
+                <button id="exit" class="danger">退出训练</button>
+              </div>
+            </div>
+          `;
+          document.getElementById('exit')?.addEventListener('click', () => abortToHome());
+          const k2 = await waitForKey(['Space']);
+          if (k2 === 'Escape') return;
+
+          // show 50ms then blank
+          container.innerHTML = `<div class="stimulus-wrapper" style="width:100%;"><div id="display"></div></div>`;
+          const display = document.getElementById('display');
+          display.innerHTML = renderMatrixHTML(matrix);
+          await new Promise(r => setTimeout(r, 50));
+          display.innerHTML = '<div style="color:#0a0a0a;"> </div>';
+
+          // wait delay then play tone
+          await new Promise(r => setTimeout(r, delayMs));
+          playCueByRow(targetRow, 3);
+
+          // quick answer: 只要求选择行位（降低负担，重点在节奏适应）
+          const answer = await new Promise((resolve) => {
+            showScreen({
+              title: '过渡热身（不计分）',
+              subtitle: '提示音已播放：请选择对应行位（这里不要求输入字母，只训练等待节奏）。',
+              pills: [ `延迟：${delayMs}ms`, `热身 ${w+1}/${warmupsPerDelay}` ],
+              bodyHtml: `
+                <div class="row-choices">
+                  <button class="choice-btn" id="r1"><strong>1</strong>：上</button>
+                  <button class="choice-btn" id="r2"><strong>2</strong>：中</button>
+                  <button class="choice-btn" id="r3"><strong>3</strong>：下</button>
+                </div>
+                <div class="stats">快捷键：1/2/3</div>
+              `,
+              buttons: [
+                { id: 'exit', text: '退出训练', className: 'danger', onClick: () => abortToHome() },
+              ]
+            });
+            const finish = (ans) => resolve(ans);
+            const bind = (id, val) => document.getElementById(id)?.addEventListener('click', () => finish(val));
+            bind('r1', 1); bind('r2', 2); bind('r3', 3);
+            const onKey = (e) => {
+              if (e.key === '1') finish(1);
+              if (e.key === '2') finish(2);
+              if (e.key === '3') finish(3);
+              if (e.key === 'Escape') { abortRequested = true; finish(null); }
+            };
+            window.addEventListener('keydown', onKey, { once: true });
+          });
+          if (abortRequested || answer == null) return;
+
+          const ok = (answer === targetRow);
+          stage.events.push({ t: nowIso(), kind: 'warmup_answer', delayMs, w: w+1, answer, targetRow, ok });
+        }
+      }
+
+      showScreen({
+        title: '过渡阶段训练完成',
+        subtitle: '已完成延迟节奏适应热身。你可以返回菜单选择其他训练项目。',
+        pills: [],
+        bodyHtml: '',
+        buttons: [
+          { id: 'back', text: '返回训练菜单', onClick: () => showTrainingMenu() },
+          { id: 'exit', text: '退出训练', className: 'danger', onClick: () => showIntro() },
+        ]
+      });
+    }
+
+    function summarizeTraining() {
+      const lines = [];
+      for (const s of trainingLog.stages) {
+        if (!s) continue;
+        if (s.name.startsWith('whole_report_')) {
+          const responses = (s.events || []).filter(e => e.kind === 'trial_response');
+          const trials = responses.length;
+          const avgAcc = trials ? (responses.reduce((sum, r) => sum + (r.acc || 0), 0) / trials) : 0;
+          lines.push(`- 全报告练习（${s.params?.label || s.name}）：${trials} 次，平均正确率 ${Math.round(avgAcc*100)}%`);
+          continue;
+        }
+        if (s.name === 'auditory_association') {
+          const answers = (s.events || []).filter(e => e.kind === 'tone_answer');
+          const trials = answers.length;
+          const ok = answers.filter(a => a.ok).length;
+          lines.push(`- 听觉关联训练：${ok}/${trials} 正确`);
+          continue;
+        }
+        if (s.name === 'partial_0ms') {
+          const answers = (s.events || []).filter(e => e.kind === 'response');
+          const trials = answers.length;
+          const full = answers.filter(a => (a.correctLetters || 0) >= 3).length;
+          const wrongRow = answers.filter(a => a.wrongRow).length;
+          lines.push(`- 0ms 局部报告：${trials} 次，满分 ${full} 次，疑似填错行 ${wrongRow} 次`);
+          continue;
+        }
+        if (s.name === 'anti_prediction') {
+          lines.push(`- 防预测训练：${s.params?.trials || ''} 次（声音先于画面）`);
+          continue;
+        }
+        if (s.name === 'transition_warmups') {
+          const d = (s.params?.delaysMs || []).map(ms => `${ms/1000}s`).join('、');
+          lines.push(`- 过渡热身：延迟条件 ${d}（每个 ${s.params?.warmupsPerDelay || ''} 次不计分）`);
+          continue;
+        }
+      }
+      return lines.join('\n');
+    }
+
+    // ==================== 启动 ====================
+    showIntro();
+  </script>
+</body>
+</html>
