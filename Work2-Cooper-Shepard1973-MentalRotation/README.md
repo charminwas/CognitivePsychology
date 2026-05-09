@@ -1,6 +1,8 @@
 # 实验2 使用手册
+
 * `mental_rotation_experiment.html`: 实验程序
 * `train.html`: 训练程序
+
 ## 导出数据简介
 | 列名 | 含义 |
 | --- | --- |
