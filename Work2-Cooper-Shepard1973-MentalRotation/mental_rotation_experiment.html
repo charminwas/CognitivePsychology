@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cooper & Shepard (1973) 心理旋转实验</title>
+  <link href="https://unpkg.com/jspsych@7.3.4/css/jspsych.css" rel="stylesheet" />
+  <style>
+    body {
+      background: #000;
+      color: #fff;
+    }
+    .jspsych-display-element {
+      background: #000;
+      color: #fff;
+    }
+    .jspsych-content-wrapper,
+    .jspsych-content {
+      color: #fff;
+    }
+    .jspsych-btn {
+      background: #1f1f1f;
+      color: #fff;
+      border: 1px solid #8a8a8a;
+      font-size: 18px;
+      padding: 10px 18px;
+    }
+    .jspsych-btn:hover {
+      background: #2e2e2e;
+      border-color: #b0b0b0;
+    }
+    .jspsych-survey-html-form p,
+    .jspsych-survey-html-form label {
+      color: #fff;
+      font-size: 22px;
+    }
+    .jspsych-survey-html-form input,
+    .jspsych-survey-html-form select {
+      font-size: 20px;
+      padding: 6px 8px;
+      margin-left: 8px;
+    }
+    .center-wrap {
+      width: 360px;
+      height: 360px;
+      margin: 0 auto;
+      border-radius: 50%;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      position: relative;
+    }
+    .fixation {
+      font-size: 56px;
+      line-height: 1;
+    }
+    .char-stim {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 160px;
+      line-height: 1;
+      user-select: none;
+    }
+    .char-target {
+      color: #fff;
+      -webkit-text-stroke: 0 transparent;
+    }
+    .char-cue {
+      color: transparent;
+      -webkit-text-stroke: 3px #fff;
+    }
+    .arrow-stim {
+      font-size: 170px;
+      line-height: 1;
+      user-select: none;
+    }
+    .arrow-target {
+      color: #fff;
+      -webkit-text-stroke: 0 transparent;
+    }
+    .arrow-cue {
+      color: transparent;
+      -webkit-text-stroke: 3px #fff;
+    }
+    @supports not (-webkit-text-stroke: 1px #fff) {
+      .char-cue,
+      .arrow-cue {
+        color: #fff;
+        opacity: 0.45;
+      }
+    }
+    .msg {
+      font-size: 30px;
+      line-height: 1.6;
+      text-align: center;
+      max-width: 980px;
+      margin: 0 auto;
+    }
+    .msg.small {
+      font-size: 24px;
+    }
+    .hint {
+      margin-top: 18px;
+      font-size: 22px;
+      opacity: 0.9;
+    }
+    .good {
+      color: #66ff99;
+      font-weight: bold;
+    }
+    .bad {
+      color: #ff6b6b;
+      font-weight: bold;
+    }
+    .mono {
+      font-family: Consolas, Menlo, monospace;
+    }
+  </style>
+</head>
+<body>
+  <script src="https://unpkg.com/jspsych@7.3.4"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-html-keyboard-response@1.1.3"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-call-function@1.1.3"></script>
+  <script src="https://unpkg.com/@jspsych/plugin-survey-html-form@1.0.3"></script>
+
+  <script>
+    (function () {
+      const KEY_F = "f";
+      const KEY_J = "j";
+      const KEY_SPACE = " ";
+      const KEY_ESC = "Escape";
+      const MAX_RT = 3000;
+
+      const CHARS = ["R", "J", "G", "2", "5", "7"];
+      const ANGLES = [0, 60, 120, 180, 240, 300];
+      const B_SOA = [100, 400, 1000];
+      const BLOCKS = ["N", "I", "O", "B", "C"];
+
+      const DEFAULT_SOA_NON_B = 400;
+      const SUBJ_FALLBACK = "S001";
+      const SESSION_FALLBACK = "1";
+
+      const expState = {
+        subjectId: SUBJ_FALLBACK,
+        session: SESSION_FALLBACK,
+        mappingMode: "normal",
+        keyMap: { normal: KEY_J, backward: KEY_F },
+        hasSaved: false,
+        forcedExit: false,
+        warningEarlyCount: 0,
+        practice: {
+          round: 1,
+          passed: false,
+          accuracy: 0,
+          correct: 0,
+          total: 0
+        }
+      };
+
+      const jsPsych = initJsPsych({
+        show_progress_bar: false,
+        override_safe_mode: true,
+        on_finish: function () {}
+      });
+
+      function normalizeKey(key) {
+        if (!key) return null;
+        if (key === " ") return "space";
+        return String(key).toLowerCase();
+      }
+
+      function shuffleCopy(arr) {
+        return jsPsych.randomization.shuffle(arr.slice());
+      }
+
+      function makeCharHtml(character, angle, mirror, isCue) {
+        const xScale = mirror ? -1 : 1;
+        const styleClass = isCue ? "char-cue" : "char-target";
+        return (
+          '<div class="center-wrap">' +
+          `<div class="char-stim ${styleClass}" style="transform: rotate(${angle}deg) scaleX(${xScale});">${character}</div>` +
+          "</div>"
+        );
+      }
+
+      function makeArrowHtml(angle, isCue) {
+        const styleClass = isCue ? "arrow-cue" : "arrow-target";
+        return (
+          '<div class="center-wrap">' +
+          `<div class="arrow-stim ${styleClass}" style="transform: rotate(${angle}deg);">↑</div>` +
+          "</div>"
+        );
+      }
+
+      function fixationHtml() {
+        return '<div class="center-wrap"><div class="fixation">+</div></div>';
+      }
+
+      function blankHtml() {
+        return "";
+      }
+
+      function getCorrectKey(mirror) {
+        return mirror ? expState.keyMap.backward : expState.keyMap.normal;
+      }
+
+      function getMirrorLabel(mirror) {
+        return mirror ? "Backward" : "Normal";
+      }
+
+      function getCueLabel(blockType) {
+        switch (blockType) {
+          case "N": return "无预备线索";
+          case "I": return "身份线索";
+          case "O": return "朝向线索";
+          case "B": return "分离线索";
+          case "C": return "组合线索";
+          default: return blockType;
+        }
+      }
+
+      function makeMainTrials(blockType) {
+        const trials = [];
+        for (const ch of CHARS) {
+          for (const angle of ANGLES) {
+            for (const mirror of [false, true]) {
+              if (blockType === "B") {
+                for (const soa of B_SOA) {
+                  trials.push({
+                    blockType,
+                    stimulus: ch,
+                    angle,
+                    mirror,
+                    soa
+                  });
+                }
+              } else {
+                trials.push({
+                  blockType,
+                  stimulus: ch,
+                  angle,
+                  mirror,
+                  soa: null
+                });
+              }
+            }
+          }
+        }
+        return shuffleCopy(trials);
+      }
+
+      function writeTrialRecord(payload) {
+        jsPsych.data.write(Object.assign({
+          record_type: "trial",
+          subject_id: expState.subjectId,
+          session: expState.session
+        }, payload));
+      }
+
+      function rtFlag(rt) {
+        if (rt === null || rt === undefined) return 1;
+        if (rt < 150 || rt > MAX_RT) return 1;
+        return 0;
+      }
+
+      function exportData(tag) {
+        const records = jsPsych.data.get().filter({ record_type: "trial" }).values();
+        const columns = [
+          "Subject_ID", "Session", "Block_Type", "Trial_Num", "Stimulus", "Angle",
+          "Mirror_Condition", "SOA", "Response_Key", "ACC", "RT", "Flag",
+          "Early_Key", "Repeated_Trial", "Practice_Round", "Timestamp"
+        ];
+
+        const rows = records.map((r) => ([
+          r.subject_id || "",
+          r.session || "",
+          r.block_type || "",
+          r.trial_num || "",
+          r.stimulus || "",
+          r.angle !== undefined ? r.angle : "",
+          r.mirror_condition || "",
+          r.soa !== null && r.soa !== undefined ? r.soa : "",
+          r.response_key || "",
+          r.acc !== undefined ? r.acc : "",
+          r.rt !== undefined && r.rt !== null ? r.rt : "",
+          r.flag !== undefined ? r.flag : "",
+          r.early_key || 0,
+          r.repeated_trial || 0,
+          r.practice_round || "",
+          r.timestamp || ""
+        ]));
+
+        const csvLines = [columns.join(",")];
+        for (const row of rows) {
+          csvLines.push(row.map((v) => {
+            const value = String(v ?? "");
+            if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+              return `"${value.replace(/"/g, '""')}"`;
+            }
+            return value;
+          }).join(","));
+        }
+
+        const csvText = csvLines.join("\n");
+        const blob = new Blob([csvText], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const timeTag = new Date().toISOString().replace(/[:.]/g, "-");
+        a.href = url;
+        a.download = `mental_rotation_${expState.subjectId}_session${expState.session}_${tag}_${timeTag}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        expState.hasSaved = true;
+      }
+
+      function emergencyExit() {
+        if (expState.forcedExit) return;
+        expState.forcedExit = true;
+        exportData("emergency_exit");
+        jsPsych.endExperiment("实验已由主试通过 ESC 中断，当前数据已保存。");
+      }
+
+      document.addEventListener("keydown", function (e) {
+        if (e.key === KEY_ESC) {
+          e.preventDefault();
+          emergencyExit();
+        }
+      });
+
+      function createAdaptiveTrialRunner(options) {
+        const state = {
+          queue: [],
+          current: null,
+          early: false,
+          earlyKey: null,
+          globalTrialIndex: 0,
+          _earlyListener: null
+        };
+
+        function initQueueIfNeeded() {
+          if (state.queue.length === 0) {
+            state.queue = shuffleCopy(options.getTrials());
+            if (typeof options.onQueueInit === "function") {
+              options.onQueueInit();
+            }
+          }
+        }
+
+        function blockTypeNow() {
+          return options.blockType != null ? options.blockType : state.current.blockType;
+        }
+
+        function orientationCueMs(cur) {
+          if (cur.blockType === "B") {
+            return cur.soa;
+          }
+          return DEFAULT_SOA_NON_B;
+        }
+
+        function detachEarlyListener() {
+          if (state._earlyListener) {
+            document.removeEventListener("keydown", state._earlyListener, true);
+            state._earlyListener = null;
+          }
+        }
+
+        function registerEarlyListener(t0) {
+          detachEarlyListener();
+          state._earlyListener = function (e) {
+            if (state.early) return;
+            const k = normalizeKey(e.key);
+            if (k !== KEY_F && k !== KEY_J) return;
+            e.preventDefault();
+            e.stopPropagation();
+            state.early = true;
+            state.earlyKey = k;
+            writeTrialRecord({
+              block_type: state.current.blockType,
+              trial_num: state.globalTrialIndex,
+              stimulus: state.current.stimulus,
+              angle: state.current.angle,
+              mirror_condition: getMirrorLabel(state.current.mirror),
+              soa: state.current.soa,
+              response_key: k,
+              acc: 0,
+              rt: performance.now() - t0,
+              flag: 1,
+              early_key: 1,
+              repeated_trial: 1,
+              practice_round: options.isPractice ? expState.practice.round : "",
+              timestamp: new Date().toISOString()
+            });
+            jsPsych.finishTrial();
+          };
+          document.addEventListener("keydown", state._earlyListener, true);
+        }
+
+        function preTargetNoKeysTrial(stimulus, durationMs) {
+          return {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: stimulus,
+            choices: "NO_KEYS",
+            response_ends_trial: false,
+            trial_duration: durationMs,
+            on_load: function () {
+              registerEarlyListener(performance.now());
+            },
+            on_finish: function () {
+              detachEarlyListener();
+            }
+          };
+        }
+
+        function arrowCueTrial() {
+          return {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: function () {
+              return makeArrowHtml(state.current.angle, true);
+            },
+            choices: "NO_KEYS",
+            response_ends_trial: false,
+            trial_duration: function () {
+              return orientationCueMs(state.current);
+            },
+            on_load: function () {
+              registerEarlyListener(performance.now());
+            },
+            on_finish: function () {
+              detachEarlyListener();
+            }
+          };
+        }
+
+        function timelineIf(conditionFn, innerTimeline) {
+          return {
+            timeline: innerTimeline,
+            conditional_function: conditionFn
+          };
+        }
+
+        const runnerTimeline = [
+          {
+            type: jsPsychCallFunction,
+            func: function () {
+              initQueueIfNeeded();
+              if (state.queue.length === 0) {
+                return;
+              }
+              state.current = state.queue.shift();
+              state.early = false;
+              state.earlyKey = null;
+              state.globalTrialIndex += 1;
+            }
+          },
+          preTargetNoKeysTrial(fixationHtml, 500),
+          timelineIf(function () {
+            return !state.early;
+          }, [
+            preTargetNoKeysTrial(blankHtml, 200)
+          ]),
+          timelineIf(function () {
+            const bt = blockTypeNow();
+            return !state.early && (bt === "I" || bt === "B");
+          }, [
+            preTargetNoKeysTrial(function () {
+              return makeCharHtml(state.current.stimulus, 0, false, true);
+            }, 2000)
+          ]),
+          timelineIf(function () {
+            return !state.early && blockTypeNow() === "C";
+          }, [
+            preTargetNoKeysTrial(function () {
+              return makeCharHtml(state.current.stimulus, state.current.angle, state.current.mirror, true);
+            }, 2000)
+          ]),
+          timelineIf(function () {
+            const bt = blockTypeNow();
+            return !state.early && (bt === "I" || bt === "B" || bt === "C");
+          }, [
+            preTargetNoKeysTrial(blankHtml, 400)
+          ]),
+          timelineIf(function () {
+            const bt = blockTypeNow();
+            return !state.early && (bt === "O" || bt === "B");
+          }, [
+            arrowCueTrial()
+          ]),
+          timelineIf(function () {
+            return !state.early;
+          }, [
+            {
+              type: jsPsychHtmlKeyboardResponse,
+              stimulus: function () {
+                return makeCharHtml(state.current.stimulus, state.current.angle, state.current.mirror, false);
+              },
+              choices: [KEY_F, KEY_J],
+              trial_duration: MAX_RT,
+              response_ends_trial: true,
+              data: {
+                trial_phase: "target"
+              },
+              on_finish: function (data) {
+                if (state.early) return;
+
+                const responseKey = normalizeKey(data.response);
+                const correctKey = getCorrectKey(state.current.mirror);
+                const acc = responseKey !== null && responseKey === correctKey ? 1 : 0;
+                const rt = data.rt ?? null;
+                const flagged = rtFlag(rt);
+
+                if (options.isPractice) {
+                  expState.practice.total += 1;
+                  expState.practice.correct += acc;
+                }
+
+                writeTrialRecord({
+                  block_type: state.current.blockType,
+                  trial_num: state.globalTrialIndex,
+                  stimulus: state.current.stimulus,
+                  angle: state.current.angle,
+                  mirror_condition: getMirrorLabel(state.current.mirror),
+                  soa: state.current.soa,
+                  response_key: responseKey,
+                  acc,
+                  rt,
+                  flag: flagged,
+                  early_key: 0,
+                  repeated_trial: 0,
+                  practice_round: options.isPractice ? expState.practice.round : "",
+                  timestamp: new Date().toISOString()
+                });
+              }
+            }
+          ]),
+          timelineIf(function () {
+            return options.isPractice && !state.early;
+          }, [
+            {
+              type: jsPsychHtmlKeyboardResponse,
+              stimulus: function () {
+                const rec = jsPsych.data.get().filter({ record_type: "trial" }).last(1).values()[0];
+                if (!rec || rec.early_key === 1) return "";
+                const correctText = rec.acc === 1 ? "✔ 正确" : "✖ 错误";
+                const correctAnswer = rec.mirror_condition === "Backward"
+                  ? `镜像 (${expState.keyMap.backward.toUpperCase()})`
+                  : `正像 (${expState.keyMap.normal.toUpperCase()})`;
+                return (
+                  `<div class="msg ${rec.acc === 1 ? "good" : "bad"}">${correctText}</div>` +
+                  `<div class="msg small">正确答案：${correctAnswer}</div>`
+                );
+              },
+              choices: "NO_KEYS",
+              trial_duration: 800
+            }
+          ]),
+          timelineIf(function () {
+            return state.early;
+          }, [
+            {
+              type: jsPsychHtmlKeyboardResponse,
+              stimulus: function () {
+                expState.warningEarlyCount += 1;
+                const keyText = state.earlyKey ? `（检测到按键：${String(state.earlyKey).toUpperCase()}）` : "";
+                return (
+                  `<div class="msg bad">检测到提前按键${keyText}，本试次无效，将在本区组末尾重做。</div>` +
+                  '<div class="hint">请仅在实心目标字符出现后按 F / J 进行反应。</div>'
+                );
+              },
+              choices: "NO_KEYS",
+              trial_duration: 1200,
+              on_finish: function () {
+                state.queue.push(state.current);
+              }
+            }
+          ]),
+          {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: blankHtml,
+            choices: "NO_KEYS",
+            trial_duration: 1000
+          }
+        ];
+
+        return {
+          timeline: runnerTimeline,
+          loop_function: function () {
+            return state.queue.length > 0;
+          }
+        };
+      }
+
+      const timeline = [];
+
+      timeline.push({
+        type: jsPsychSurveyHtmlForm,
+        preamble: '<div class="msg">实验基本信息</div>',
+        html:
+          '<p><label>被试编号 Subject_ID：<input name="subject_id" type="text" value="S001" required /></label></p>' +
+          '<p><label>Session：<input name="session" type="text" value="1" required /></label></p>' +
+          '<p><label>按键映射：' +
+          '<select name="mapping_mode">' +
+          '<option value="normal" selected>J = 正像 / F = 镜像（默认）</option>' +
+          '<option value="swap">F = 正像 / J = 镜像（对调）</option>' +
+          "</select></label></p>",
+        button_label: "确认并继续",
+        on_finish: function (data) {
+          const resp = data.response || {};
+          expState.subjectId = (resp.subject_id || SUBJ_FALLBACK).trim() || SUBJ_FALLBACK;
+          expState.session = (resp.session || SESSION_FALLBACK).trim() || SESSION_FALLBACK;
+          expState.mappingMode = resp.mapping_mode || "normal";
+          if (expState.mappingMode === "swap") {
+            expState.keyMap = { normal: KEY_F, backward: KEY_J };
+          } else {
+            expState.keyMap = { normal: KEY_J, backward: KEY_F };
+          }
+        }
+      });
+
+      timeline.push({
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: function () {
+          return (
+            '<div class="msg">' +
+            "<p>欢迎参加心理旋转实验。</p>" +
+            "<p>任务：判断目标字符是 <b>正像</b> 还是 <b>镜像</b>。</p>" +
+            `<p>当前按键映射：<span class="mono">${expState.keyMap.normal.toUpperCase()}</span> = 正像，` +
+            `<span class="mono">${expState.keyMap.backward.toUpperCase()}</span> = 镜像</p>` +
+            "<p>请尽量又快又准。目标出现前请勿按键。</p>" +
+            '<p class="hint">训练已拆分到 train.html。按空格键进入正式实验。</p>' +
+            "</div>"
+          );
+        },
+        choices: [KEY_SPACE]
+      });
+
+      for (let i = 0; i < BLOCKS.length; i += 1) {
+        const blockType = BLOCKS[i];
+        const blockRunner = createAdaptiveTrialRunner({
+          isPractice: false,
+          blockType: blockType,
+          getTrials: function () {
+            return makeMainTrials(blockType);
+          }
+        });
+
+        timeline.push({
+          type: jsPsychHtmlKeyboardResponse,
+          stimulus: function () {
+            const cueLabel = getCueLabel(blockType);
+            return (
+              `<div class="msg">正式实验 Block ${i + 1} / ${BLOCKS.length}</div>` +
+              `<div class="msg small">条件：${blockType}（${cueLabel}）</div>` +
+              '<div class="hint">按空格键开始本区组。</div>'
+            );
+          },
+          choices: [KEY_SPACE]
+        });
+
+        timeline.push(blockRunner);
+
+        if (i < BLOCKS.length - 1) {
+          timeline.push({
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus:
+              '<div class="msg">请休息片刻。</div>' +
+              '<div class="msg small">准备好后按空格键继续下一 Block。</div>',
+            choices: [KEY_SPACE]
+          });
+        }
+      }
+
+      timeline.push({
+        type: jsPsychHtmlKeyboardResponse,
+        stimulus: function () {
+          return (
+            '<div class="msg good">实验结束。</div>' +
+            `<div class="msg small">提前按键重排次数：${expState.warningEarlyCount}</div>` +
+            '<div class="msg small">按 <span class="mono">D</span> 下载 CSV 数据，按空格直接结束。</div>'
+          );
+        },
+        choices: ["d", KEY_SPACE]
+      });
+
+      timeline.push({
+        type: jsPsychCallFunction,
+        func: function () {
+          const lastResp = normalizeKey(jsPsych.data.get().last(1).values()[0]?.response);
+          if (lastResp === "d") {
+            exportData("manual");
+          }
+        }
+      });
+
+      jsPsych.run(timeline);
+    })();
+  </script>
+</body>
+</html>
