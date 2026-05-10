@@ -1,0 +1,759 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RT × Angle 折线图（按 Block_Type 分组）</title>
+    <style>
+        :root {
+            --bg: #fafafa;
+            --card-bg: #ffffff;
+            --text: #333333;
+            --text-secondary: #666666;
+            --border: #e0e0e0;
+            --grid: #e8e8e8;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Helvetica Neue', sans-serif;
+            background: #f0f2f5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .chart-container {
+            background: var(--card-bg);
+            border-radius: 16px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, 0.08), 0 1px 4px rgba(0, 0, 0, 0.04);
+            padding: 28px 24px 20px 24px;
+            max-width: 920px;
+            width: 100%;
+            transition: box-shadow 0.3s ease;
+        }
+
+        .chart-container:hover {
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+        }
+
+        .chart-header {
+            text-align: center;
+            margin-bottom: 8px;
+        }
+
+        .chart-title {
+            font-size: 1.4rem;
+            font-weight: 600;
+            color: var(--text);
+            letter-spacing: 0.3px;
+        }
+
+        .chart-subtitle {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 2px;
+            font-weight: 400;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            width: 100%;
+            overflow: visible;
+        }
+
+        svg {
+            display: block;
+            width: 100%;
+            height: auto;
+        }
+
+        /* 图例样式 */
+        .legend-group {
+            cursor: default;
+        }
+
+        .legend-item {
+            cursor: pointer;
+            transition: opacity 0.2s ease;
+        }
+
+        .legend-item:hover {
+            opacity: 1 !important;
+        }
+
+        .legend-item.dimmed {
+            opacity: 0.35;
+            transition: opacity 0.25s ease;
+        }
+
+        /* 折线样式 */
+        .line-path {
+            fill: none;
+            stroke-width: 2.8;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            transition: opacity 0.25s ease, stroke-width 0.2s ease;
+        }
+
+        .line-path.dimmed {
+            opacity: 0.18;
+            stroke-width: 2;
+        }
+
+        .line-path.highlighted {
+            stroke-width: 4.2;
+            opacity: 1;
+        }
+
+        /* 数据点样式 */
+        .data-dot {
+            transition: opacity 0.25s ease, r 0.2s ease;
+            cursor: pointer;
+        }
+
+        .data-dot.dimmed {
+            opacity: 0.18;
+            pointer-events: none;
+        }
+
+        .data-dot.highlighted {
+            r: 6.5;
+            opacity: 1;
+            stroke-width: 3;
+        }
+
+        /* Tooltip */
+        .tooltip {
+            position: absolute;
+            pointer-events: none;
+            background: rgba(40, 40, 40, 0.92);
+            color: #ffffff;
+            padding: 8px 14px;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            line-height: 1.5;
+            white-space: nowrap;
+            box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25);
+            opacity: 0;
+            transform: translate(-50%, -120%);
+            transition: opacity 0.18s ease;
+            z-index: 10;
+            letter-spacing: 0.2px;
+        }
+
+        .tooltip.visible {
+            opacity: 1;
+        }
+
+        .tooltip .tt-label {
+            font-weight: 600;
+            font-size: 0.88rem;
+            margin-bottom: 2px;
+        }
+
+        .tooltip .tt-value {
+            color: #ddd;
+            font-size: 0.78rem;
+        }
+
+        .tooltip .tt-rt {
+            font-weight: 700;
+            font-size: 0.9rem;
+            color: #fff;
+        }
+
+        /* 响应式 */
+        @media (max-width: 700px) {
+            .chart-container {
+                padding: 16px 10px 12px 10px;
+                border-radius: 10px;
+            }
+            .chart-title {
+                font-size: 1.15rem;
+            }
+            .chart-subtitle {
+                font-size: 0.72rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="chart-container">
+        <div class="chart-header">
+            <div class="chart-title">📊 反应时间随角度变化趋势</div>
+            <div class="chart-subtitle">仅显示正确试验（ACC = 1）· 按 Block_Type 分组</div>
+        </div>
+        <div class="chart-wrapper" id="chartWrapper">
+            <!-- D3 将在此处渲染 SVG -->
+        </div>
+    </div>
+
+    <!-- D3.js v7 CDN -->
+    <script src="https://d3js.org/d3.v7.min.js">
+    </script>
+
+    <script>
+        (async function () {
+            // ==================== 常量配置 ====================
+            const ALL_ANGLES = [0, 60, 120, 180, 240, 300, 360];
+            const BLOCK_TYPES = ['N', 'I', 'O', 'B', 'C'];
+            const Y_MAX = 3000; // RT 纵轴上限（ms）
+
+            // 颜色映射 —— 使用色盲友好的 Tableau-inspired 配色
+            const COLOR_MAP = {
+                'N': '#4E79A7', // 蓝色
+                'I': '#F28E2B', // 橙色
+                'O': '#59A14F', // 绿色
+                'B': '#E15759', // 红色
+                'C': '#B07AA1', // 紫色
+            };
+
+            // 为每个 Block_Type 分配一个短划线样式（全部实线，靠颜色区分）
+            const DASH_STYLE_MAP = {
+                'N': '',
+                'I': '',
+                'O': '',
+                'B': '',
+                'C': '',
+            };
+
+            // ==================== SVG 尺寸与边距 ====================
+            const containerWidth = document.getElementById('chartWrapper').clientWidth;
+            const svgWidth = Math.min(containerWidth, 880);
+            const margin = {
+                top: 28,
+                right: 155, // 右侧留宽给图例
+                bottom: 55,
+                left: 62,
+            };
+            const plotWidth = svgWidth - margin.left - margin.right;
+            const plotHeight = 420; // 绘图区域高度
+            const svgHeight = plotHeight + margin.top + margin.bottom;
+
+            // ==================== 创建 SVG ====================
+            const wrapper = d3.select('#chartWrapper');
+            wrapper.selectAll('*').remove(); // 清除旧内容
+
+            const svg = wrapper
+                .append('svg')
+                .attr('viewBox', `0 0 ${svgWidth} ${svgHeight}`)
+                .attr('preserveAspectRatio', 'xMidYMid meet')
+                .attr('width', svgWidth)
+                .attr('height', svgHeight);
+
+            // 定义阴影滤镜（用于 tooltip 的微妙效果）
+            const defs = svg.append('defs');
+            const glowFilter = defs.append('filter')
+                .attr('id', 'dotGlow')
+                .attr('x', '-50%').attr('y', '-50%')
+                .attr('width', '200%').attr('height', '200%');
+            glowFilter.append('feGaussianBlur')
+                .attr('in', 'SourceAlpha')
+                .attr('stdDeviation', 2.5)
+                .attr('result', 'blur');
+            glowFilter.append('feOffset')
+                .attr('in', 'blur')
+                .attr('dx', 0)
+                .attr('dy', 0)
+                .attr('result', 'offsetBlur');
+            const merge = glowFilter.append('feMerge');
+            merge.append('feMergeNode').attr('in', 'offsetBlur');
+            merge.append('feMergeNode').attr('in', 'SourceGraphic');
+
+            // ==================== 绘图区域组 ====================
+            const plotGroup = svg.append('g')
+                .attr('transform', `translate(${margin.left},${margin.top})`);
+
+            // 裁剪路径（防止数据点溢出）
+            defs.append('clipPath')
+                .attr('id', 'plotClip')
+                .append('rect')
+                .attr('x', -8)
+                .attr('y', -8)
+                .attr('width', plotWidth + 16)
+                .attr('height', plotHeight + 16);
+
+            const clipGroup = plotGroup.append('g')
+                .attr('clip-path', 'url(#plotClip)');
+
+            // ==================== 比例尺 ====================
+            const xScale = d3.scaleLinear()
+                .domain([0, 360])
+                .range([0, plotWidth])
+                .nice();
+
+            const yScale = d3.scaleLinear()
+                .domain([0, Y_MAX])
+                .range([plotHeight, 0])
+                .nice();
+
+            // ==================== 坐标轴与网格 ====================
+            // X 轴
+            const xAxis = d3.axisBottom(xScale)
+                .tickValues(ALL_ANGLES)
+                .tickFormat(d => d + '°')
+                .tickSizeOuter(0);
+
+            const xAxisGroup = plotGroup.append('g')
+                .attr('class', 'x-axis')
+                .attr('transform', `translate(0,${plotHeight})`)
+                .call(xAxis);
+
+            // X 轴标签
+            xAxisGroup.append('text')
+                .attr('x', plotWidth / 2)
+                .attr('y', 42)
+                .attr('fill', '#555')
+                .attr('font-size', '0.9rem')
+                .attr('font-weight', '500')
+                .attr('text-anchor', 'middle')
+                .text('Angle（角度）');
+
+            // Y 轴
+            const yAxis = d3.axisLeft(yScale)
+                .ticks(8)
+                .tickFormat(d => d + ' ms')
+                .tickSizeOuter(0);
+
+            const yAxisGroup = plotGroup.append('g')
+                .attr('class', 'y-axis')
+                .call(yAxis);
+
+            // Y 轴标签
+            yAxisGroup.append('text')
+                .attr('x', -42)
+                .attr('y', plotHeight / 2)
+                .attr('fill', '#555')
+                .attr('font-size', '0.9rem')
+                .attr('font-weight', '500')
+                .attr('text-anchor', 'middle')
+                .attr('transform', `rotate(-90, -42, ${plotHeight / 2})`)
+                .text('RT（反应时间）');
+
+            // 水平网格线
+            const gridGroup = plotGroup.append('g').attr('class', 'grid-lines');
+            const yTicks = yScale.ticks(8);
+            gridGroup.selectAll('.grid-h')
+                .data(yTicks)
+                .enter()
+                .append('line')
+                .attr('class', 'grid-h')
+                .attr('x1', 0)
+                .attr('x2', plotWidth)
+                .attr('y1', d => yScale(d))
+                .attr('y2', d => yScale(d))
+                .attr('stroke', '#e6e6e6')
+                .attr('stroke-width', 0.7)
+                .attr('stroke-dasharray', '4,3');
+
+            // 垂直网格线（在刻度位置）
+            gridGroup.selectAll('.grid-v')
+                .data(ALL_ANGLES)
+                .enter()
+                .append('line')
+                .attr('class', 'grid-v')
+                .attr('x1', d => xScale(d))
+                .attr('x2', d => xScale(d))
+                .attr('y1', 0)
+                .attr('y2', plotHeight)
+                .attr('stroke', '#e6e6e6')
+                .attr('stroke-width', 0.7)
+                .attr('stroke-dasharray', '4,3');
+
+            // ==================== Tooltip 元素 ====================
+            const tooltip = wrapper
+                .append('div')
+                .attr('class', 'tooltip')
+                .style('position', 'absolute')
+                .style('pointer-events', 'none');
+
+            // ==================== 读取并处理数据 ====================
+            let rawData;
+            try {
+                rawData = await d3.csv('./data.csv');
+            } catch (err) {
+                console.error('❌ 无法读取 data.csv，请确保文件存在于同文件夹下。', err);
+                // 显示错误提示
+                plotGroup.append('text')
+                    .attr('x', plotWidth / 2)
+                    .attr('y', plotHeight / 2 - 20)
+                    .attr('text-anchor', 'middle')
+                    .attr('fill', '#c0392b')
+                    .attr('font-size', '1rem')
+                    .attr('font-weight', '500')
+                    .text('⚠️ 无法读取 data.csv');
+                plotGroup.append('text')
+                    .attr('x', plotWidth / 2)
+                    .attr('y', plotHeight / 2 + 15)
+                    .attr('text-anchor', 'middle')
+                    .attr('fill', '#888')
+                    .attr('font-size', '0.8rem')
+                    .text('请确保 data.csv 与本 HTML 文件在同一文件夹下');
+                return;
+            }
+
+            // 过滤 ACC=1 的数据
+            const filteredData = rawData.filter(d => {
+                const acc = +d.ACC;
+                return acc === 1;
+            });
+            const normalizedData = filteredData.map(d => ({
+                ...d,
+                Angle: +d.Angle === 360 ? 0 : +d.Angle
+            }));
+
+            if (normalizedData.length === 0) {
+                plotGroup.append('text')
+                    .attr('x', plotWidth / 2)
+                    .attr('y', plotHeight / 2)
+                    .attr('text-anchor', 'middle')
+                    .attr('fill', '#e67e22')
+                    .attr('font-size', '0.95rem')
+                    .attr('font-weight', '500')
+                    .text('⚠️ 没有 ACC=1 的数据可供绘制');
+                return;
+            }
+
+            // 按 Block_Type 和 Angle 分组，计算平均 RT
+            const grouped = d3.rollup(
+                normalizedData,
+                v => d3.mean(v, d => +d.RT),
+                d => d.Block_Type.trim(), // 去除可能的空格
+                d => +d.Angle
+            );
+
+            // 构建完整数据（缺失角度填充 null，确保折线断开）
+            const processedData = []; // { Block_Type, Angle, RT }
+            const blockTypesFound = new Set();
+
+            for (const [blockType, angleMap] of grouped) {
+                blockTypesFound.add(blockType);
+                for (const angle of ALL_ANGLES) {
+                    let rt;
+                    if (angle === 360) {
+                        rt = angleMap.has(0) ? angleMap.get(0) : null;   // 360° 直接取 0° 的均值
+                    } else {
+                        rt = angleMap.has(angle) ? angleMap.get(angle) : null;
+                    }
+                    processedData.push({
+                        Block_Type: blockType,
+                        Angle: angle,
+                        RT: rt,
+                    });
+                }
+            }
+
+            // 确保 BLOCK_TYPES 中的类型都存在（即使某类型完全没有数据）
+            const presentBlockTypes = BLOCK_TYPES.filter(bt => blockTypesFound.has(bt));
+            if (presentBlockTypes.length === 0) {
+                // 如果数据中的 Block_Type 不在预设列表中，使用实际出现的类型
+                const allFound = Array.from(blockTypesFound);
+                allFound.forEach(bt => {
+                    if (!BLOCK_TYPES.includes(bt)) {
+                        presentBlockTypes.push(bt);
+                    }
+                });
+            }
+
+            // 按 Block_Type 分组数据用于绘制折线
+            const dataByBlockType = new Map();
+            for (const bt of presentBlockTypes) {
+                const lineData = processedData
+                    .filter(d => d.Block_Type === bt)
+                    .sort((a, b) => a.Angle - b.Angle);
+                dataByBlockType.set(bt, lineData);
+            }
+
+            // ==================== 折线生成器 ====================
+            const lineGenerator = d3.line()
+                .defined(d => d.RT !== null && !isNaN(d.RT) && d.RT !== undefined)
+                .x(d => xScale(d.Angle))
+                .y(d => yScale(d.RT))
+                .curve(d3.curveLinear); // 使用直线连接；如需平滑可用 curveMonotoneX
+
+            // ==================== 绘制折线 ====================
+            const lineGroups = {}; // 存储每条线的引用
+
+            for (const [blockType, lineData] of dataByBlockType) {
+                const lineColor = COLOR_MAP[blockType] || '#888888';
+
+                // 折线路径
+                const path = clipGroup.append('path')
+                    .datum(lineData)
+                    .attr('class', 'line-path')
+                    .attr('d', lineGenerator)
+                    .attr('stroke', lineColor)
+                    .attr('stroke-dasharray', DASH_STYLE_MAP[blockType] || '')
+                    .attr('data-block-type', blockType);
+
+                // 数据点圆点
+                const dots = clipGroup.selectAll(`.dot-${blockType.replace(/[^a-zA-Z0-9]/g, '_')}`)
+                    .data(lineData.filter(d => d.RT !== null && !isNaN(d.RT)))
+                    .enter()
+                    .append('circle')
+                    .attr('class', 'data-dot')
+                    .attr('data-block-type', blockType)
+                    .attr('cx', d => xScale(d.Angle))
+                    .attr('cy', d => yScale(d.RT))
+                    .attr('r', 4.5)
+                    .attr('fill', '#ffffff')
+                    .attr('stroke', lineColor)
+                    .attr('stroke-width', 2.5)
+                    .attr('filter', 'url(#dotGlow)')
+                    .style('cursor', 'pointer');
+
+                // 为数据点添加原生 title（简易 tooltip）
+                dots.append('title')
+                    .text(d =>
+                        `Block_Type: ${blockType}\nAngle: ${d.Angle}°\nRT: ${d.RT?.toFixed(1) ?? 'N/A'} ms`
+                    );
+
+                // 存储引用
+                lineGroups[blockType] = {
+                    path: path,
+                    dots: dots,
+                    color: lineColor,
+                };
+            }
+
+            // ==================== 图例 ====================
+            const legendGroup = svg.append('g')
+                .attr('class', 'legend-group')
+                .attr('transform', `translate(${margin.left + plotWidth + 18}, ${margin.top + 6})`);
+
+            // 图例背景
+            const legendBg = legendGroup.append('rect')
+                .attr('x', -10)
+                .attr('y', -8)
+                .attr('rx', 8)
+                .attr('ry', 8)
+                .attr('fill', '#fafbfc')
+                .attr('stroke', '#e0e0e0')
+                .attr('stroke-width', 1)
+                .attr('opacity', 0.85);
+
+            // 图例标题
+            legendGroup.append('text')
+                .attr('x', 4)
+                .attr('y', 14)
+                .attr('font-size', '0.78rem')
+                .attr('font-weight', '700')
+                .attr('fill', '#444')
+                .text('Block_Type');
+
+            const legendItemsData = presentBlockTypes.map((bt, i) => ({
+                blockType: bt,
+                color: COLOR_MAP[bt] || '#888',
+                yOffset: 32 + i * 26,
+            }));
+
+            // 存储图例项引用
+            const legendItemRefs = {};
+
+            const legendItemGroups = legendGroup.selectAll('.legend-item')
+                .data(legendItemsData)
+                .enter()
+                .append('g')
+                .attr('class', 'legend-item')
+                .attr('data-block-type', d => d.blockType)
+                .attr('transform', d => `translate(4, ${d.yOffset})`)
+                .style('cursor', 'pointer');
+
+            // 图例中的线段
+            legendItemGroups.append('line')
+                .attr('x1', 0)
+                .attr('x2', 28)
+                .attr('y1', 0)
+                .attr('y2', 0)
+                .attr('stroke', d => d.color)
+                .attr('stroke-width', 3.2)
+                .attr('stroke-linecap', 'round');
+
+            // 图例中的小圆点
+            legendItemGroups.append('circle')
+                .attr('cx', 14)
+                .attr('cy', 0)
+                .attr('r', 4.2)
+                .attr('fill', '#fff')
+                .attr('stroke', d => d.color)
+                .attr('stroke-width', 2.2);
+
+            // 图例文字
+            legendItemGroups.append('text')
+                .attr('x', 36)
+                .attr('y', 0)
+                .attr('dy', '0.35em')
+                .attr('font-size', '0.82rem')
+                .attr('font-weight', '500')
+                .attr('fill', '#444')
+                .text(d => d.blockType);
+
+            // 存储图例项
+            legendItemsData.forEach(d => {
+                legendItemRefs[d.blockType] = d;
+            });
+
+            // 计算图例背景尺寸
+            const legendItemCount = presentBlockTypes.length;
+            const legendBgHeight = legendItemCount * 26 + 32;
+            const legendBgWidth = 125;
+            legendBg
+                .attr('width', legendBgWidth)
+                .attr('height', legendBgHeight);
+
+            // ==================== 图例交互：悬停高亮 ====================
+            let hoveredBlockType = null;
+
+            function updateHighlight(blockType) {
+                hoveredBlockType = blockType;
+
+                // 更新所有折线和数据点
+                for (const [bt, group] of Object.entries(lineGroups)) {
+                    if (blockType === null) {
+                        // 恢复全部
+                        group.path.classed('dimmed', false).classed('highlighted', false);
+                        group.dots.classed('dimmed', false).classed('highlighted', false);
+                    } else if (bt === blockType) {
+                        // 高亮
+                        group.path.classed('dimmed', false).classed('highlighted', true);
+                        group.dots.classed('dimmed', false).classed('highlighted', true);
+                    } else {
+                        // 变暗
+                        group.path.classed('dimmed', true).classed('highlighted', false);
+                        group.dots.classed('dimmed', true).classed('highlighted', false);
+                    }
+                }
+
+                // 更新图例项
+                legendItemGroups.classed('dimmed', function (d) {
+                    if (blockType === null) return false;
+                    return d.blockType !== blockType;
+                });
+            }
+
+            // 图例项悬停
+            legendItemGroups
+                .on('mouseenter', function (event, d) {
+                    updateHighlight(d.blockType);
+                })
+                .on('mouseleave', function () {
+                    updateHighlight(null);
+                });
+
+            // 数据点悬停
+            for (const [bt, group] of Object.entries(lineGroups)) {
+                group.dots
+                    .on('mouseenter', function (event, d) {
+                        updateHighlight(bt);
+                        // 显示自定义 tooltip
+                        tooltip
+                            .classed('visible', true)
+                            .html(`
+                                <div class="tt-label">Block_Type: <strong>${bt}</strong></div>
+                                <div class="tt-value">Angle: ${d.Angle}°</div>
+                                <div class="tt-rt">RT: ${d.RT?.toFixed(1) ?? 'N/A'} ms</div>
+                            `);
+                    })
+                    .on('mousemove', function (event) {
+                        const wrapperRect = wrapper.node().getBoundingClientRect();
+                        const x = event.clientX - wrapperRect.left;
+                        const y = event.clientY - wrapperRect.top;
+                        tooltip
+                            .style('left', x + 'px')
+                            .style('top', (y - 10) + 'px');
+                    })
+                    .on('mouseleave', function () {
+                        updateHighlight(null);
+                        tooltip.classed('visible', false);
+                    });
+
+                // 折线路径悬停（通过透明宽路径捕获事件）
+                const invisiblePath = clipGroup.append('path')
+                    .datum(dataByBlockType.get(bt))
+                    .attr('d', lineGenerator)
+                    .attr('stroke', 'transparent')
+                    .attr('stroke-width', 16)
+                    .attr('fill', 'none')
+                    .attr('data-block-type', bt)
+                    .style('cursor', 'pointer')
+                    .style('pointer-events', 'stroke');
+
+                invisiblePath
+                    .on('mouseenter', function () {
+                        updateHighlight(bt);
+                    })
+                    .on('mouseleave', function () {
+                        updateHighlight(null);
+                        tooltip.classed('visible', false);
+                    })
+                    .on('mousemove', function (event) {
+                        const wrapperRect = wrapper.node().getBoundingClientRect();
+                        const x = event.clientX - wrapperRect.left;
+                        const y = event.clientY - wrapperRect.top;
+                        // 找到最近的数据点
+                        const mouseX = x - margin.left;
+                        const lineData = dataByBlockType.get(bt);
+                        if (!lineData) return;
+                        const validData = lineData.filter(d => d.RT !== null && !isNaN(d.RT));
+                        if (validData.length === 0) return;
+                        let closest = validData[0];
+                        let minDist = Math.abs(xScale(closest.Angle) - mouseX);
+                        for (const pt of validData) {
+                            const dist = Math.abs(xScale(pt.Angle) - mouseX);
+                            if (dist < minDist) {
+                                minDist = dist;
+                                closest = pt;
+                            }
+                        }
+                        if (minDist < 60) {
+                            tooltip
+                                .classed('visible', true)
+                                .html(`
+                                    <div class="tt-label">Block_Type: <strong>${bt}</strong></div>
+                                    <div class="tt-value">Angle: ${closest.Angle}°</div>
+                                    <div class="tt-rt">RT: ${closest.RT?.toFixed(1) ?? 'N/A'} ms</div>
+                                `)
+                                .style('left', x + 'px')
+                                .style('top', (y - 10) + 'px');
+                        } else {
+                            tooltip.classed('visible', false);
+                        }
+                    });
+            }
+
+            // ==================== 无数据提示 ====================
+            if (presentBlockTypes.length === 0) {
+                plotGroup.append('text')
+                    .attr('x', plotWidth / 2)
+                    .attr('y', plotHeight / 2)
+                    .attr('text-anchor', 'middle')
+                    .attr('fill', '#999')
+                    .attr('font-size', '1rem')
+                    .text('暂无匹配数据');
+            }
+
+            // ==================== 输出数据摘要到控制台 ====================
+            console.log('✅ 数据加载成功！');
+            console.log(`   - 原始数据行数: ${rawData.length}`);
+            console.log(`   - ACC=1 数据行数: ${normalizedData.length}`);
+            console.log(`   - 检测到的 Block_Type: [${presentBlockTypes.join(', ')}]`);
+            console.log('   - 各 Block_Type 数据点数:');
+            for (const bt of presentBlockTypes) {
+                const count = dataByBlockType.get(bt)?.filter(d => d.RT !== null).length || 0;
+                console.log(`       ${bt}: ${count} 个角度有数据`);
+            }
+            console.log('   💡 提示：悬停图例或数据点可高亮对应折线');
+
+        })();
+    </script>
+</body>
+</html>
