@@ -145,6 +145,7 @@
         session: SESSION_FALLBACK,
         mappingMode: "normal",
         keyMap: { normal: KEY_J, backward: KEY_F },
+        startBlockIndex: 0,
         hasSaved: false,
         forcedExit: false,
         warningEarlyCount: 0,
@@ -603,7 +604,17 @@
           '<select name="mapping_mode">' +
           '<option value="normal" selected>J = 正像 / F = 镜像（默认）</option>' +
           '<option value="swap">F = 正像 / J = 镜像（对调）</option>' +
-          "</select></label></p>",
+          "</select></label></p>" +
+          '<p><label>从第几个正式 Block 开始：' +
+          '<select name="start_block_index">' +
+          BLOCKS.map(function (bt, idx) {
+            const sel = idx === 0 ? " selected" : "";
+            return (
+              '<option value="' + idx + '"' + sel + ">Block " + (idx + 1) + "（" + bt + "：" + getCueLabel(bt) + "）</option>"
+            );
+          }).join("") +
+          "</select></label></p>" +
+          '<p class="hint" style="font-size:18px;opacity:0.85">若上次中断，可从对应 Block 继续；未完成的 Block 不会补做。</p>',
         button_label: "确认并继续",
         on_finish: function (data) {
           const resp = data.response || {};
@@ -615,6 +626,8 @@
           } else {
             expState.keyMap = { normal: KEY_J, backward: KEY_F };
           }
+          const sb = parseInt(resp.start_block_index, 10);
+          expState.startBlockIndex = Number.isFinite(sb) && sb >= 0 && sb < BLOCKS.length ? sb : 0;
         }
       });
 
@@ -628,7 +641,7 @@
             `<p>当前按键映射：<span class="mono">${expState.keyMap.normal.toUpperCase()}</span> = 正像，` +
             `<span class="mono">${expState.keyMap.backward.toUpperCase()}</span> = 镜像</p>` +
             "<p>请尽量又快又准。目标出现前请勿按键。</p>" +
-            '<p class="hint">训练已拆分到 train.html。按空格键进入正式实验。</p>' +
+            '<p class="hint">训练已拆分到 train.html。起始 Block 已在上一页选择。按空格键进入正式实验。</p>' +
             "</div>"
           );
         },
@@ -636,6 +649,7 @@
       });
 
       for (let i = 0; i < BLOCKS.length; i += 1) {
+        const blockIndex = i;
         const blockType = BLOCKS[i];
         const blockRunner = createAdaptiveTrialRunner({
           isPractice: false,
@@ -645,23 +659,29 @@
           }
         });
 
-        timeline.push({
-          type: jsPsychHtmlKeyboardResponse,
-          stimulus: function () {
-            const cueLabel = getCueLabel(blockType);
-            return (
-              `<div class="msg">正式实验 Block ${i + 1} / ${BLOCKS.length}</div>` +
-              `<div class="msg small">条件：${blockType}（${cueLabel}）</div>` +
-              '<div class="hint">按空格键开始本区组。</div>'
-            );
+        const blockChunk = [
+          {
+            type: jsPsychHtmlKeyboardResponse,
+            stimulus: function () {
+              const cueLabel = getCueLabel(blockType);
+              const skipNote =
+                blockIndex === expState.startBlockIndex && expState.startBlockIndex > 0
+                  ? '<div class="msg small hint">您从本 Block 继续；此前区组未运行，导出 CSV 中也不会包含它们。</div>'
+                  : "";
+              return (
+                `<div class="msg">正式实验 Block ${blockIndex + 1} / ${BLOCKS.length}</div>` +
+                `<div class="msg small">条件：${blockType}（${cueLabel}）</div>` +
+                skipNote +
+                '<div class="hint">按空格键开始本区组。</div>'
+              );
+            },
+            choices: [KEY_SPACE]
           },
-          choices: [KEY_SPACE]
-        });
-
-        timeline.push(blockRunner);
+          blockRunner
+        ];
 
         if (i < BLOCKS.length - 1) {
-          timeline.push({
+          blockChunk.push({
             type: jsPsychHtmlKeyboardResponse,
             stimulus:
               '<div class="msg">请休息片刻。</div>' +
@@ -669,6 +689,13 @@
             choices: [KEY_SPACE]
           });
         }
+
+        timeline.push({
+          timeline: blockChunk,
+          conditional_function: function () {
+            return blockIndex >= expState.startBlockIndex;
+          }
+        });
       }
 
       timeline.push({
