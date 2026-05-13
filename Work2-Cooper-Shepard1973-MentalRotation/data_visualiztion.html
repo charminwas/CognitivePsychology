@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>实验结果折线图</title>
+    <title>实验结果折线图 - 含 B/I/C 详细视图</title>
     <style>
         :root {
             --bg: #ffffff;
@@ -28,7 +28,7 @@
             align-items: center;
             min-height: 100vh;
             padding: 24px;
-            gap: 20px;
+            gap: 16px;
         }
 
         .controls {
@@ -55,7 +55,36 @@
         }
 
         select:focus {
-            border-color: #4E79A7;
+            border-color: #4e79a7;
+        }
+
+        .section-divider {
+            width: 100%;
+            max-width: 880px;
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin: 16px 0 4px 0;
+            user-select: none;
+        }
+
+        .section-divider .divider-line {
+            flex: 1;
+            height: 1px;
+            background: #d0d0d0;
+        }
+
+        .section-divider .divider-label {
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: #777;
+            white-space: nowrap;
+            letter-spacing: 0.3px;
+        }
+
+        .section-divider .divider-arrow {
+            color: #999;
+            font-size: 0.75rem;
         }
 
         .chart-container {
@@ -64,6 +93,10 @@
             background: #ffffff;
             border: 1px solid var(--border);
             padding: 20px 16px 12px 16px;
+        }
+
+        .chart-container.chart-bic {
+            border-left: 3px solid #e15759;
         }
 
         .chart-header {
@@ -88,10 +121,11 @@
             width: 100%;
         }
 
-        svg {
+        /* 让 SVG 自适应高度，避免非法属性 */
+        .chart-wrapper svg {
             display: block;
             width: 100%;
-            height: auto;
+            height: auto !important;
         }
 
         /* 图例 */
@@ -178,23 +212,45 @@
         <select id="subjectSelect">
             <option value="__AVERAGE__">总体平均值 (AVG)</option>
         </select>
+        <span style="font-size:0.78rem;color:#888;">（切换后两个图表同步更新）</span>
     </div>
 
-    <div class="chart-container">
+    <!-- ========== 图1：全部 Block Type ========== -->
+    <div class="chart-container" id="chartContainer1">
         <div class="chart-header">
-            <div class="chart-title" id="chartTitle">反应时间随角度变化趋势</div>
-            <div class="chart-subtitle" id="chartSubtitle">仅正确试验 (ACC=1) · 按 Block Type 分组</div>
+            <div class="chart-title" id="chartTitle1">反应时间随角度变化趋势</div>
+            <div class="chart-subtitle" id="chartSubtitle1">仅正确试验 (ACC=1) · 按 Block Type 分组</div>
         </div>
-        <div class="chart-wrapper" id="chartWrapper"></div>
+        <div class="chart-wrapper" id="chartWrapper1"></div>
     </div>
 
-    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <!-- ========== 分隔线 ========== -->
+    <div class="section-divider">
+        <span class="divider-line"></span>
+        <span class="divider-arrow">▼</span>
+        <span class="divider-label">B / I / C 详细视图（B 按 SOA 细分）</span>
+        <span class="divider-arrow">▼</span>
+        <span class="divider-line"></span>
+    </div>
+
+    <!-- ========== 图2：B / I / C，B 按 SOA 分组 ========== -->
+    <div class="chart-container chart-bic" id="chartContainer2">
+        <div class="chart-header">
+            <div class="chart-title" id="chartTitle2">B / I / C 反应时间趋势（B 按 SOA 分组）</div>
+            <div class="chart-subtitle" id="chartSubtitle2">仅正确试验 (ACC=1) · I 和 C 各一条折线 · B 按 SOA 细分</div>
+        </div>
+        <div class="chart-wrapper" id="chartWrapper2"></div>
+    </div>
+
+    <script src="https://d3js.org/d3.v7.min.js">
+    </script>
     <script>
-        (async function () {
+        (async function() {
             // ==================== 全局配置 ====================
             const ALL_ANGLES = [0, 60, 120, 180, 240, 300, 360];
             const BLOCK_TYPES = ['N', 'I', 'O', 'B', 'C'];
 
+            // 颜色映射（对象形式，同时兼容 Map）
             const COLOR_MAP = {
                 'N': '#4E79A7',
                 'I': '#F28E2B',
@@ -203,12 +259,28 @@
                 'C': '#B07AA1',
             };
 
+            // B 按 SOA 分组时的颜色调色板（红色系，从深到浅）
+            const B_SOA_PALETTE = [
+                '#8B0000',
+                '#A31515',
+                '#C0392B',
+                '#D64541',
+                '#E15759',
+                '#EC7063',
+                '#F08C7E',
+                '#F5A998',
+                '#FAD2C9',
+                '#FDE8E4',
+            ];
+
             // ==================== 数据加载 ====================
             let rawData;
             try {
                 rawData = await d3.csv('./data.csv');
             } catch (err) {
-                document.getElementById('chartWrapper').innerHTML =
+                document.getElementById('chartWrapper1').innerHTML =
+                    '<p style="text-align:center;color:#c0392b;padding:40px;">无法读取 data.csv，请检查文件</p>';
+                document.getElementById('chartWrapper2').innerHTML =
                     '<p style="text-align:center;color:#c0392b;padding:40px;">无法读取 data.csv，请检查文件</p>';
                 return;
             }
@@ -222,16 +294,27 @@
                     RT: +d.RT,
                     Subject_ID: d.Subject_ID?.trim() || 'Unknown',
                     Block_Type: d.Block_Type?.trim() || '',
+                    SOA: d.SOA !== undefined ? String(d.SOA).trim() : '',
                 }));
 
             if (filteredData.length === 0) {
-                document.getElementById('chartWrapper').innerHTML =
+                document.getElementById('chartWrapper1').innerHTML =
+                    '<p style="text-align:center;color:#e67e22;padding:40px;">没有 ACC=1 的数据</p>';
+                document.getElementById('chartWrapper2').innerHTML =
                     '<p style="text-align:center;color:#e67e22;padding:40px;">没有 ACC=1 的数据</p>';
                 return;
             }
 
-            // 动态计算 Y 轴最大值（留 5% 余量）
-            const Y_MAX = d3.max(filteredData, d => d.RT) * 1.05;
+            // 图1 Y 轴最大值
+            const Y_MAX_ALL = d3.max(filteredData, d => d.RT) * 1.05;
+
+            // 图2 数据范围（仅 B/I/C）
+            const bicFiltered = filteredData.filter(d =>
+                d.Block_Type === 'B' || d.Block_Type === 'I' || d.Block_Type === 'C'
+            );
+            const Y_MAX_BIC = bicFiltered.length > 0 ?
+                d3.max(bicFiltered, d => d.RT) * 1.05 :
+                Y_MAX_ALL;
 
             // 被试列表
             const subjectIds = Array.from(new Set(filteredData.map(d => d.Subject_ID))).sort();
@@ -243,24 +326,7 @@
                 selectEl.appendChild(opt);
             });
 
-            // ==================== 数据聚合 ====================
-            // 个体数据：Map<Subject_ID, Map<Block_Type, lineData[]>>
-            const subjectGrouped = d3.rollup(
-                filteredData,
-                v => d3.mean(v, d => d.RT),
-                d => d.Subject_ID,
-                d => d.Block_Type,
-                d => d.Angle
-            );
-
-            // 总体平均
-            const overallGrouped = d3.rollup(
-                filteredData,
-                v => d3.mean(v, d => d.RT),
-                d => d.Block_Type,
-                d => d.Angle
-            );
-
+            // ==================== 数据聚合工具函数 ====================
             function buildLineData(angleMap) {
                 return ALL_ANGLES.map(angle => {
                     let rt;
@@ -273,6 +339,22 @@
                 }).sort((a, b) => a.Angle - b.Angle);
             }
 
+            // ==================== 图1 数据准备 ====================
+            const subjectGrouped = d3.rollup(
+                filteredData,
+                v => d3.mean(v, d => d.RT),
+                d => d.Subject_ID,
+                d => d.Block_Type,
+                d => d.Angle
+            );
+
+            const overallGrouped = d3.rollup(
+                filteredData,
+                v => d3.mean(v, d => d.RT),
+                d => d.Block_Type,
+                d => d.Angle
+            );
+
             const subjectDataMap = new Map();
             for (const [subj, blockMap] of subjectGrouped) {
                 const perBlockMap = new Map();
@@ -282,7 +364,6 @@
                         perBlockMap.set(bt, buildLineData(angleMap));
                     }
                 }
-                // 可能有的非预设类型
                 for (const bt of blockMap.keys()) {
                     if (!BLOCK_TYPES.includes(bt)) {
                         perBlockMap.set(bt, buildLineData(blockMap.get(bt)));
@@ -304,13 +385,94 @@
                 }
             }
 
-            // ==================== 绘图函数 ====================
-            function drawChart(containerId, title, subtitle, dataMap, viewLabel) {
+            // ==================== 图2 数据准备 ====================
+            function prepareBICData(dataSubset) {
+                const bic = dataSubset.filter(d =>
+                    d.Block_Type === 'B' || d.Block_Type === 'I' || d.Block_Type === 'C'
+                );
+
+                const dataMap = new Map();
+                const colorMap = new Map();
+
+                // I 类型
+                const iData = bic.filter(d => d.Block_Type === 'I');
+                if (iData.length > 0) {
+                    const iAngleMap = d3.rollup(iData, v => d3.mean(v, d => d.RT), d => d.Angle);
+                    dataMap.set('I', buildLineData(iAngleMap));
+                    colorMap.set('I', COLOR_MAP['I']);
+                }
+
+                // C 类型
+                const cData = bic.filter(d => d.Block_Type === 'C');
+                if (cData.length > 0) {
+                    const cAngleMap = d3.rollup(cData, v => d3.mean(v, d => d.RT), d => d.Angle);
+                    dataMap.set('C', buildLineData(cAngleMap));
+                    colorMap.set('C', COLOR_MAP['C']);
+                }
+
+                // B 类型 - 按 SOA 分组
+                const bData = bic.filter(d => d.Block_Type === 'B');
+                if (bData.length > 0) {
+                    const soaValues = Array.from(new Set(bData.map(d => d.SOA).filter(s => s !== '')));
+                    const soaNumeric = soaValues.map(s => ({ raw: s, num: parseFloat(s) }));
+                    const allNumeric = soaNumeric.every(s => !isNaN(s.num));
+                    if (allNumeric) {
+                        soaNumeric.sort((a, b) => a.num - b.num);
+                    } else {
+                        soaNumeric.sort((a, b) => a.raw.localeCompare(b.raw));
+                    }
+                    const sortedSOAs = soaNumeric.map(s => s.raw);
+
+                    if (sortedSOAs.length <= 1) {
+                        const bAngleMap = d3.rollup(bData, v => d3.mean(v, d => d.RT), d => d.Angle);
+                        const key = sortedSOAs.length === 1 ? `B (SOA=${sortedSOAs[0]})` : 'B';
+                        dataMap.set(key, buildLineData(bAngleMap));
+                        colorMap.set(key, COLOR_MAP['B']);
+                    } else {
+                        sortedSOAs.forEach((soa, idx) => {
+                            const bSOAData = bData.filter(d => d.SOA === soa);
+                            if (bSOAData.length > 0) {
+                                const bSOAAngleMap = d3.rollup(bSOAData, v => d3.mean(v, d => d.RT),
+                                    d => d.Angle);
+                                const key = `B (SOA=${soa})`;
+                                dataMap.set(key, buildLineData(bSOAAngleMap));
+                                const colorIdx = Math.min(idx, B_SOA_PALETTE.length - 1);
+                                colorMap.set(key, B_SOA_PALETTE[colorIdx]);
+                            }
+                        });
+                    }
+                }
+
+                return { dataMap, colorMap };
+            }
+
+            const overallBIC = prepareBICData(filteredData);
+            const subjectBICMap = new Map();
+            for (const subj of subjectIds) {
+                const subjData = filteredData.filter(d => d.Subject_ID === subj);
+                subjectBICMap.set(subj, prepareBICData(subjData));
+            }
+
+            // ==================== 通用绘图函数 ====================
+            function drawChart(config) {
+                const {
+                    containerId,
+                    titleId,
+                    subtitleId,
+                    dataMap,
+                    colorMap,
+                    legendTitle,
+                    title,
+                    subtitle,
+                    viewLabel,
+                    yMax,
+                } = config;
+
                 const container = document.getElementById(containerId);
                 container.innerHTML = '';
 
                 const svgWidth = 880;
-                const margin = { top: 28, right: 155, bottom: 55, left: 74 };
+                const margin = { top: 28, right: 160, bottom: 55, left: 74 };
                 const plotWidth = svgWidth - margin.left - margin.right;
                 const plotHeight = 420;
                 const svgHeight = plotHeight + margin.top + margin.bottom;
@@ -320,14 +482,14 @@
                     .append('svg')
                     .attr('viewBox', `0 0 ${svgWidth} ${svgHeight}`)
                     .attr('preserveAspectRatio', 'xMidYMid meet')
-                    .attr('width', '100%')
-                    .attr('height', 'auto');
+                    .attr('width', '100%');
+                // 不再设置 height 属性，由 CSS 控制自适应
 
                 // 绘图区域
                 const plotGroup = svg.append('g')
                     .attr('transform', `translate(${margin.left},${margin.top})`);
 
-                // 裁剪（防止点溢出）
+                // 裁剪
                 svg.append('defs')
                     .append('clipPath')
                     .attr('id', `plotClip-${containerId}`)
@@ -346,14 +508,14 @@
                     .range([0, plotWidth]);
 
                 const yScale = d3.scaleLinear()
-                    .domain([0, Y_MAX])
+                    .domain([0, yMax])
                     .range([plotHeight, 0])
-                    .nice();    // 使刻度更整洁
+                    .nice();
 
                 // 坐标轴
                 const xAxis = d3.axisBottom(xScale)
                     .tickValues(ALL_ANGLES)
-                    .tickFormat(d => d)   // 去掉单位，仅显示数字
+                    .tickFormat(d => d)
                     .tickSizeOuter(0);
 
                 const xAxisGroup = plotGroup.append('g')
@@ -370,13 +532,12 @@
 
                 const yAxis = d3.axisLeft(yScale)
                     .ticks(8)
-                    .tickFormat(d => d)   // 去掉单位，单位在轴标题中
+                    .tickFormat(d => d)
                     .tickSizeOuter(0);
 
                 const yAxisGroup = plotGroup.append('g')
                     .call(yAxis);
 
-                // Y轴标签：注意旋转中心与偏移量匹配
                 yAxisGroup.append('text')
                     .attr('x', -56)
                     .attr('y', plotHeight / 2)
@@ -421,14 +582,24 @@
                     .y(d => yScale(d.RT))
                     .curve(d3.curveLinear);
 
-                // 绘制各 Block Type 折线与点
-                const presentBlockTypes = Array.from(dataMap.keys());
+                // 辅助函数：从颜色映射中安全获取颜色（兼容对象和Map）
+                function getColor(key) {
+                    if (colorMap instanceof Map) {
+                        return colorMap.get(key) || '#666666';
+                    } else if (typeof colorMap === 'object' && colorMap !== null) {
+                        return colorMap[key] || '#666666';
+                    }
+                    return '#666666';
+                }
+
+                // 绘制各系列折线与点
+                const presentSeries = Array.from(dataMap.keys());
                 const lineGroups = {};
 
-                for (const bt of presentBlockTypes) {
-                    const lineData = dataMap.get(bt);
+                for (const seriesKey of presentSeries) {
+                    const lineData = dataMap.get(seriesKey);
                     if (!lineData || lineData.length === 0) continue;
-                    const color = COLOR_MAP[bt] || '#666666';
+                    const color = getColor(seriesKey);
 
                     const path = clipGroup.append('path')
                         .datum(lineData)
@@ -436,14 +607,14 @@
                         .attr('d', lineGen)
                         .attr('stroke', color)
                         .attr('stroke-width', 2)
-                        .attr('data-block-type', bt);
+                        .attr('data-series-key', seriesKey);
 
-                    const dots = clipGroup.selectAll(`.dot-${bt.replace(/\W/g, '_')}-${containerId}`)
+                    const dots = clipGroup.selectAll(`.dot-${seriesKey.replace(/\W/g, '_')}-${containerId}`)
                         .data(lineData.filter(d => d.RT !== null && !isNaN(d.RT)))
                         .enter()
                         .append('circle')
                         .attr('class', 'data-dot')
-                        .attr('data-block-type', bt)
+                        .attr('data-series-key', seriesKey)
                         .attr('cx', d => xScale(d.Angle))
                         .attr('cy', d => yScale(d.RT))
                         .attr('r', 3.8)
@@ -452,15 +623,16 @@
                         .attr('stroke-width', 2);
 
                     dots.append('title')
-                        .text(d => `Block ${bt}\nAngle: ${d.Angle}°\nRT: ${d.RT?.toFixed(1) ?? 'N/A'} ms`);
+                        .text(d =>
+                            `${seriesKey}\nAngle: ${d.Angle}°\nRT: ${d.RT?.toFixed(1) ?? 'N/A'} ms`);
 
-                    lineGroups[bt] = { path, dots, color };
+                    lineGroups[seriesKey] = { path, dots, color };
                 }
 
                 // 透明宽路径用于悬停检测
                 const invisiblePaths = {};
-                for (const bt of presentBlockTypes) {
-                    const lineData = dataMap.get(bt);
+                for (const seriesKey of presentSeries) {
+                    const lineData = dataMap.get(seriesKey);
                     if (!lineData) continue;
                     const invPath = clipGroup.append('path')
                         .datum(lineData)
@@ -468,59 +640,71 @@
                         .attr('stroke', 'transparent')
                         .attr('stroke-width', 16)
                         .attr('fill', 'none')
-                        .attr('data-block-type', bt)
+                        .attr('data-series-key', seriesKey)
                         .style('pointer-events', 'stroke')
                         .style('cursor', 'pointer');
-                    invisiblePaths[bt] = invPath;
+                    invisiblePaths[seriesKey] = invPath;
                 }
 
-                // 图例（右上区域）
+                // 图例
                 const legendGroup = svg.append('g')
-                    .attr('transform', `translate(${margin.left + plotWidth + 18}, ${margin.top + 6})`);
+                    .attr('transform',
+                        `translate(${margin.left + plotWidth + 20}, ${margin.top + 6})`);
 
-                const legendItems = presentBlockTypes.map((bt, i) => ({
-                    blockType: bt,
-                    color: COLOR_MAP[bt] || '#666',
-                    yOffset: 24 + i * 22,
+                const useCompact = presentSeries.length > 7;
+                const legendItemHeight = useCompact ? 18 : 22;
+                const legendFontSize = useCompact ? '0.72rem' : '0.8rem';
+                const legendLineWidth = useCompact ? 18 : 22;
+                const legendDotR = useCompact ? 3 : 3.5;
+
+                const legendItems = presentSeries.map((sk, i) => ({
+                    seriesKey: sk,
+                    color: getColor(sk),
+                    yOffset: 24 + i * legendItemHeight,
                 }));
 
-                // 图例标题
                 legendGroup.append('text')
                     .attr('x', 0)
                     .attr('y', 14)
-                    .attr('font-size', '0.8rem')
+                    .attr('font-size', legendFontSize)
                     .attr('font-weight', '600')
                     .attr('fill', '#333')
-                    .text('Block Type');
+                    .text(legendTitle);
 
                 const legendItemGroups = legendGroup.selectAll('.legend-item')
                     .data(legendItems)
                     .enter()
                     .append('g')
                     .attr('class', 'legend-item')
-                    .attr('data-block-type', d => d.blockType)
+                    .attr('data-series-key', d => d.seriesKey)
                     .attr('transform', d => `translate(0, ${d.yOffset})`);
 
                 legendItemGroups.append('line')
-                    .attr('x1', 0).attr('x2', 22)
+                    .attr('x1', 0).attr('x2', legendLineWidth)
                     .attr('y1', 0).attr('y2', 0)
                     .attr('stroke', d => d.color)
                     .attr('stroke-width', 2.5)
                     .attr('stroke-linecap', 'round');
 
                 legendItemGroups.append('circle')
-                    .attr('cx', 11).attr('cy', 0)
-                    .attr('r', 3.5)
+                    .attr('cx', legendLineWidth / 2).attr('cy', 0)
+                    .attr('r', legendDotR)
                     .attr('fill', '#fff')
                     .attr('stroke', d => d.color)
                     .attr('stroke-width', 2);
 
                 legendItemGroups.append('text')
-                    .attr('x', 28).attr('y', 0)
+                    .attr('x', legendLineWidth + 6).attr('y', 0)
                     .attr('dy', '0.35em')
-                    .attr('font-size', '0.8rem')
+                    .attr('font-size', legendFontSize)
                     .attr('fill', '#333')
-                    .text(d => d.blockType);
+                    .text(d => d.seriesKey);
+
+                // 如果图例可能超出，添加裁剪
+                const legendTotalHeight = 24 + presentSeries.length * legendItemHeight + 6;
+                if (legendTotalHeight > plotHeight + 20) {
+                    legendGroup.attr('clip-path', `url(#plotClip-${containerId})`);
+                }
 
                 // 右上角视图标识
                 svg.append('text')
@@ -532,15 +716,16 @@
                     .attr('fill', '#444')
                     .text(viewLabel);
 
-                // 交互：高亮
-                let hoveredBt = null;
-                function applyHighlight(bt) {
-                    hoveredBt = bt;
+                // ==================== 交互逻辑 ====================
+                let hoveredSeries = null;
+
+                function applyHighlight(seriesKey) {
+                    hoveredSeries = seriesKey;
                     for (const [key, group] of Object.entries(lineGroups)) {
-                        if (bt === null) {
+                        if (seriesKey === null) {
                             group.path.classed('dimmed', false).classed('highlighted', false);
                             group.dots.classed('dimmed', false).classed('highlighted', false);
-                        } else if (key === bt) {
+                        } else if (key === seriesKey) {
                             group.path.classed('dimmed', false).classed('highlighted', true);
                             group.dots.classed('dimmed', false).classed('highlighted', true);
                         } else {
@@ -548,66 +733,72 @@
                             group.dots.classed('dimmed', true).classed('highlighted', false);
                         }
                     }
-                    legendItemGroups.classed('dimmed', d => bt !== null && d.blockType !== bt);
+                    legendItemGroups.classed('dimmed', d => seriesKey !== null && d.seriesKey !==
+                        seriesKey);
                 }
 
                 // 图例悬停
                 legendItemGroups
-                    .on('mouseenter', (event, d) => applyHighlight(d.blockType))
+                    .on('mouseenter', (event, d) => applyHighlight(d.seriesKey))
                     .on('mouseleave', () => applyHighlight(null));
 
-                // 数据点悬停
-                for (const bt of presentBlockTypes) {
-                    const group = lineGroups[bt];
+                // 数据点与透明路径悬停
+                for (const seriesKey of presentSeries) {
+                    const group = lineGroups[seriesKey];
                     if (!group) continue;
 
                     group.dots
-                        .on('mouseenter', function (event, d) {
-                            applyHighlight(bt);
+                        .on('mouseenter', function(event, d) {
+                            applyHighlight(seriesKey);
                             tooltip
                                 .classed('visible', true)
-                                .html(`<div class="tt-label">${bt}</div>
-                                       Angle: ${d.Angle}°<br>
-                                       <span class="tt-rt">RT: ${d.RT?.toFixed(1) ?? 'N/A'} ms</span>`);
+                                .html(
+                                    `<div class="tt-label">${seriesKey}</div>
+                                     Angle: ${d.Angle}°<br>
+                                     <span class="tt-rt">RT: ${d.RT?.toFixed(1) ?? 'N/A'} ms</span>`
+                                    );
                         })
-                        .on('mousemove', function (event) {
+                        .on('mousemove', function(event) {
                             const rect = wrapper.node().getBoundingClientRect();
                             tooltip
                                 .style('left', (event.clientX - rect.left) + 'px')
                                 .style('top', (event.clientY - rect.top - 12) + 'px');
                         })
-                        .on('mouseleave', function () {
+                        .on('mouseleave', function() {
                             applyHighlight(null);
                             tooltip.classed('visible', false);
                         });
 
-                    // 透明路径悬停
-                    const invPath = invisiblePaths[bt];
+                    const invPath = invisiblePaths[seriesKey];
                     if (invPath) {
                         invPath
-                            .on('mouseenter', () => applyHighlight(bt))
+                            .on('mouseenter', () => applyHighlight(seriesKey))
                             .on('mouseleave', () => {
                                 applyHighlight(null);
                                 tooltip.classed('visible', false);
                             })
-                            .on('mousemove', function (event) {
+                            .on('mousemove', function(event) {
                                 const rect = wrapper.node().getBoundingClientRect();
                                 const mouseX = event.clientX - rect.left - margin.left;
-                                const lineData = dataMap.get(bt);
-                                const valid = lineData.filter(d => d.RT !== null && !isNaN(d.RT));
+                                const lineData = dataMap.get(seriesKey);
+                                const valid = lineData.filter(d => d.RT !== null && !isNaN(d
+                                    .RT));
                                 if (valid.length === 0) return;
                                 let closest = valid[0];
                                 let minDist = Math.abs(xScale(closest.Angle) - mouseX);
                                 for (const pt of valid) {
                                     const dist = Math.abs(xScale(pt.Angle) - mouseX);
-                                    if (dist < minDist) { minDist = dist; closest = pt; }
+                                    if (dist < minDist) { minDist = dist;
+                                        closest = pt; }
                                 }
                                 if (minDist < 60) {
                                     tooltip
                                         .classed('visible', true)
-                                        .html(`<div class="tt-label">${bt}</div>
-                                               Angle: ${closest.Angle}°<br>
-                                               <span class="tt-rt">RT: ${closest.RT?.toFixed(1) ?? 'N/A'} ms</span>`)
+                                        .html(
+                                            `<div class="tt-label">${seriesKey}</div>
+                                             Angle: ${closest.Angle}°<br>
+                                             <span class="tt-rt">RT: ${closest.RT?.toFixed(1) ?? 'N/A'} ms</span>`
+                                            )
                                         .style('left', (event.clientX - rect.left) + 'px')
                                         .style('top', (event.clientY - rect.top - 12) + 'px');
                                 } else {
@@ -618,43 +809,74 @@
                 }
 
                 // 更新标题
-                document.getElementById('chartTitle').textContent = title;
-                document.getElementById('chartSubtitle').textContent = subtitle;
+                document.getElementById(titleId).textContent = title;
+                document.getElementById(subtitleId).textContent = subtitle;
             }
 
-            // ==================== 切换逻辑 ====================
+            // ==================== 渲染驱动 ====================
             function renderView(subjectId) {
-                if (subjectId === '__AVERAGE__') {
-                    drawChart(
-                        'chartWrapper',
-                        '反应时间随角度变化趋势（总体平均）',
-                        '仅正确试验 (ACC=1) · 按 Block Type 分组',
-                        overallDataMap,
-                        'AVG'
-                    );
+                const isAvg = subjectId === '__AVERAGE__';
+                const viewLabel = isAvg ? 'AVG' : `被试 ${subjectId}`;
+
+                // 图1：全部 Block Type
+                const dataMap1 = isAvg ?
+                    overallDataMap :
+                    (subjectDataMap.get(subjectId) || new Map());
+
+                if (!isAvg && (dataMap1.size === 0)) {
+                    document.getElementById('chartWrapper1').innerHTML =
+                        `<p style="text-align:center;padding:40px;">被试 ${subjectId} 无有效数据</p>`;
+                    document.getElementById('chartTitle1').textContent = '无数据';
+                    document.getElementById('chartSubtitle1').textContent = '';
                 } else {
-                    const dataMap = subjectDataMap.get(subjectId);
-                    if (!dataMap || dataMap.size === 0) {
-                        document.getElementById('chartWrapper').innerHTML =
-                            `<p style="text-align:center;padding:40px;">被试 ${subjectId} 无有效数据</p>`;
-                        document.getElementById('chartTitle').textContent = '无数据';
-                        document.getElementById('chartSubtitle').textContent = '';
-                        return;
-                    }
-                    drawChart(
-                        'chartWrapper',
-                        `反应时间随角度变化趋势（被试 ${subjectId}）`,
-                        '仅正确试验 (ACC=1) · 按 Block Type 分组',
-                        dataMap,
-                        `被试 ${subjectId}`
-                    );
+                    drawChart({
+                        containerId: 'chartWrapper1',
+                        titleId: 'chartTitle1',
+                        subtitleId: 'chartSubtitle1',
+                        dataMap: dataMap1,
+                        colorMap: COLOR_MAP,   // 普通对象，内部会兼容处理
+                        legendTitle: 'Block Type',
+                        title: isAvg ?
+                            '反应时间随角度变化趋势（总体平均）' :
+                            `反应时间随角度变化趋势（被试 ${subjectId}）`,
+                        subtitle: '仅正确试验 (ACC=1) · 按 Block Type 分组',
+                        viewLabel: viewLabel,
+                        yMax: Y_MAX_ALL,
+                    });
+                }
+
+                // 图2：B / I / C，B 按 SOA 分组
+                const bicData = isAvg ?
+                    overallBIC :
+                    (subjectBICMap.get(subjectId) || { dataMap: new Map(), colorMap: new Map() });
+
+                if (bicData.dataMap.size === 0) {
+                    document.getElementById('chartWrapper2').innerHTML =
+                        `<p style="text-align:center;padding:40px;color:#888;">被试 ${subjectId} 无 B/I/C 数据</p>`;
+                    document.getElementById('chartTitle2').textContent = 'B / I / C 视图 - 无数据';
+                    document.getElementById('chartSubtitle2').textContent = '';
+                } else {
+                    drawChart({
+                        containerId: 'chartWrapper2',
+                        titleId: 'chartTitle2',
+                        subtitleId: 'chartSubtitle2',
+                        dataMap: bicData.dataMap,
+                        colorMap: bicData.colorMap,   // Map 对象
+                        legendTitle: 'Series',
+                        title: isAvg ?
+                            'B / I / C 反应时间趋势（总体平均）' :
+                            `B / I / C 反应时间趋势（被试 ${subjectId}）`,
+                        subtitle: '仅正确试验 (ACC=1) · I 和 C 各一条折线 · B 按 SOA 细分',
+                        viewLabel: viewLabel,
+                        yMax: Y_MAX_BIC,
+                    });
                 }
             }
 
-            // 初始加载
+            // ==================== 初始加载 ====================
             renderView('__AVERAGE__');
 
-            selectEl.addEventListener('change', function () {
+            selectEl.addEventListener('change', function() {
                 renderView(this.value);
             });
 
