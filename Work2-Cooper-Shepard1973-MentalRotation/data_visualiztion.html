@@ -221,12 +221,12 @@
 
             let rawData;
             try {
-                rawData = await d3.csv('./data.csv');
+                rawData = await d3.csv('./data_clean.csv');
             } catch (err) {
                 document.getElementById('chartWrapper1').innerHTML =
-                    '<p style="text-align:center;color:#c0392b;padding:40px;">无法读取 data.csv，请检查文件</p>';
+                    '<p style="text-align:center;color:#c0392b;padding:40px;">无法读取 data_clean.csv，请检查文件</p>';
                 document.getElementById('chartWrapper2').innerHTML =
-                    '<p style="text-align:center;color:#c0392b;padding:40px;">无法读取 data.csv，请检查文件</p>';
+                    '<p style="text-align:center;color:#c0392b;padding:40px;">无法读取 data_clean.csv，请检查文件</p>';
                 return;
             }
 
